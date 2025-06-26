@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { Urbanist } from "next/font/google";
 import { SessionProvider } from "next-auth/react";
 import "./globals.css";
+import SideBar from "@/components/SideBar";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -14,11 +15,11 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-const urbanist = Urbanist({
-  variable: "--font-urbanist",
-  subsets: ["latin"],
-  display: "swap",
-});
+// const urbanist = Urbanist({
+//   variable: "--font-urbanist",
+//   subsets: ["latin"],
+//   display: "swap",
+// });
 
 export const metadata: Metadata = {
   title: "CodeYap",
@@ -34,9 +35,12 @@ export default function RootLayout({
     <SessionProvider>
       <html lang="en">
         <body
-          className={`${geistSans.variable} ${geistMono.variable} ${urbanist.variable} antialiased`}
+          className={`${geistSans.variable} ${geistMono.variable} `}
         >
+          <SideBar/>
+          <div className="ml-[6rem]">
           {children}
+          </div>
         </body>
       </html>
     </SessionProvider>
