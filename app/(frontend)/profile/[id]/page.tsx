@@ -4,31 +4,76 @@ import Image from "next/image";
 import { MapPin } from "lucide-react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
-import React from "react";
+import React, { useEffect, useState } from "react";
 
-export default function ProfilePage({ params }: { params: { id: string } }) {
+interface UserProfile {
+  _id: string;
+  username: string;
+  profileImage?: string;
+  email: string;
+  linkedin?: string;
+  github?: string;
+  bio?: string;
+  about?: string;
+  location?: string;
+  techStacks?: string[];
+}
+
+export default function ProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const { data: session } = useSession();
-  const profileUserId = React.use(params);
+  const { id: profileUserId } = React.use(params);
   const loggedInUserId = session?.user?.id;
-
   const isOwnProfile = loggedInUserId === profileUserId;
 
+  const [user, setUser] = useState<UserProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    setError(null);
+    fetch(`/api/fetchProfle/${profileUserId}`)
+      .then(async (res) => {
+        if (!res.ok) {
+          throw new Error((await res.json()).error || "Failed to fetch user");
+        }
+        return res.json();
+      })
+      .then((data) => {
+        setUser(data);
+        setLoading(false);
+      })
+      .catch((err) => {
+        setError(err.message);
+        setLoading(false);
+      });
+  }, [profileUserId]);
+
+  if (loading) {
+    return <div className="mx-[11rem] mt-10">Loading...</div>;
+  }
+
+  if (error || !user) {
+    return <div className="mx-[11rem] mt-10 text-red-500">Error: {error || "User not found"}</div>;
+  }
+
   return (
-    <div className="mx-[11rem] mt-10 mb-6">
-      <div className="grid grid-cols-[1fr_2fr] gap-8">
-        <div>
+    <div className="mx-[8rem] mt-10 mb-6">
+      <div className="grid grid-cols-[1fr_2fr] gap-5">
+        {/* 1st grid */}
+        <div className="bg-[#1e2024] p-6 rounded-2xl">
           {/* Profile Image */}
-          <div className="h-[13rem] w-[13rem] bg-[#41403e] rounded-full relative">
+          <div className="h-[13rem] w-[13rem] bg-[#41403e] rounded-full relative mx-auto">
             <Image
-              src={default_pfp}
+              src={user.profileImage || default_pfp}
               alt="Profile pic"
               fill
               style={{ objectFit: "cover", borderRadius: "9999px" }}
             />
           </div>
           <div className="mt-6">
-            <p className="font-medium text-2xl">Username</p>
-            <p className="text-sm opacity-80">harshgeed07@gmail.com</p>
+            <p className="font-medium text-2xl">{user.username}</p>
+            <p className="text-sm opacity-80">{user.email}</p>
 
             {/* if user is viewing then edit profile button else connect button  */}
             {isOwnProfile ? (
@@ -41,42 +86,49 @@ export default function ProfilePage({ params }: { params: { id: string } }) {
               </button>
             )}
 
-            <p className="mt-5">
-              Lorem ipsum dolor sit amet consectetur, adipisicing elit. Cum at
-              odit iste hic. Obcaecati, commodi illum saepe veniam a, recusandae
-              voluptatum, dignissimos laborum reiciendis magnam labore
-              blanditiis? Iste laboriosam totam corporis! Molestiae assumenda
-              eius rerum iste ipsam cupiditate eveniet nesciunt accusantium,
-              ratione aliquam recusandae nihil maiores eaque quae, deleniti
-              repellat?
-            </p>
+            <p className="mt-5">{user.bio || "No bio provided."}</p>
             <div className="flex mt-4 opacity-80">
               <MapPin />
-              <p className="ml-2">Bhopal, Madhya Pradesh, India</p>
+              <p className="ml-2">{user.location || "No location provided."}</p>
             </div>
-            <Link href="#">
-              <button className="p-2 rounded-xl bg-blue-950 mt-3 w-full">
-                LinkedIn
-              </button>
-            </Link>
-            <Link href="#">
-              <button className="p-2 rounded-xl bg-gray-800 mt-3 w-full">
-                Github
-              </button>
-            </Link>
+            {user.linkedin && (
+              <Link href={user.linkedin} target="_blank">
+                <button className="p-2 rounded-xl bg-blue-950 mt-3 w-full">
+                  LinkedIn
+                </button>
+              </Link>
+            )}
+            {user.github && (
+              <Link href={user.github} target="_blank">
+                <button className="p-2 rounded-xl bg-gray-800 mt-3 w-full">
+                  Github
+                </button>
+              </Link>
+            )}
           </div>
         </div>
         {/* 2nd grid */}
-        <div>
-            <h1 className="text-3xl font-semibold">🤵 About Me :</h1>
-            <hr className="mt-4 opacity-50"/>
-            <p className="mt-5">Lorem ipsum dolor sit amet consectetur adipisicing elit. Sunt magni quod error saepe! Sunt harum nulla modi aliquid repellat assumenda, veniam incidunt debitis, inventore eum in explicabo. Sapiente sequi esse ducimus quos cum laudantium voluptatibus autem aut debitis, incidunt asperiores at error veritatis adipisci aspernatur earum officia quia commodi, dolorum odio facere corporis voluptate? Porro eaque officiis nemo adipisci, libero inventore in sint quas sapiente molestias, accusantium aspernatur animi neque odio eligendi corrupti impedit. Animi itaque, quam quia dolores corporis quaerat quis quae at delectus neque modi fugit. Ipsum nam tempore aperiam voluptate? At debitis autem suscipit saepe dolor, consequuntur qui quos obcaecati veniam ducimus hic, aperiam consequatur odio. Officia cum aspernatur laborum inventore quas voluptas repudiandae distinctio quasi itaque vel, atque hic perferendis, repellat ut magni pariatur fuga. Deleniti, repudiandae, vel minima unde quas odit sint sit aliquam, veritatis aut sapiente modi. Praesentium, nesciunt ab deleniti totam rerum enim ullam impedit illo dolorem reprehenderit soluta, nostrum iste, laudantium similique consequatur eius magni. Unde dolorum odit assumenda facere in beatae cumque nam corrupti mollitia vero dolor hic odio blanditiis eum a quod eius sint, aliquid accusamus, repellat rem? Commodi minus molestiae in sed. Id itaque ducimus, dolorum facere perspiciatis eveniet.</p>
+        <div className="bg-[#161719] p-6 rounded-2xl">
+          <h1 className="text-3xl font-semibold">🤵 About Me :</h1>
+          <hr className="mt-4 opacity-50" />
+          <p className="mt-5">{user.about || "No about info provided."}</p>
 
-            <h1 className="text-3xl font-semibold mt-5">💻 Tech Stacks :</h1>
-            
-            <hr className="mt-4 opacity-50"/>
-            <p className="mt-5">Lorem, ipsum dolor sit amet consectetur adipisicing elit. Deserunt aperiam dolorum corporis maxime quod commodi sequi asperiores consequatur velit, sunt neque ratione omnis suscipit vero culpa quam delectus iste? Fuga repudiandae obcaecati saepe incidunt maiores iure dolorum officia, enim perferendis quo quia ipsam error pariatur quos labore temporibus suscipit non!</p>
-
+          <h1 className="text-3xl font-semibold mt-5">💻 Tech Stacks :</h1>
+          <hr className="mt-4 opacity-50" />
+          <div className="mt-5 flex flex-wrap gap-2">
+            {user.techStacks && user.techStacks.length > 0 ? (
+              user.techStacks.map((tech, idx) => (
+                <span
+                  key={idx}
+                  className="bg-gray-700 text-white px-3 py-1 rounded-full text-sm"
+                >
+                  {tech}
+                </span>
+              ))
+            ) : (
+              <span className="text-gray-400">No tech stacks provided.</span>
+            )}
+          </div>
         </div>
       </div>
     </div>
