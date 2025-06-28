@@ -5,9 +5,16 @@ import bcrypt from "bcryptjs";
 // Define the IUser interface if not already defined
 export interface IUser extends Document {
   username: string;
+  profileImage?: string;
   email: string;
   isOauth?: boolean;
   password?: string;
+  linkedin?: string;
+  github?: string;
+  bio?: string;
+  about?: string;
+  location?: string;
+  techStacks?: string[];
 }
 
 const userSchema = new Schema<IUser>(
@@ -16,6 +23,9 @@ const userSchema = new Schema<IUser>(
       type: String,
       required: true,
       trim: true,
+    },
+    profileImage: {
+      type: String,
     },
     email: {
       type: String,
@@ -37,6 +47,43 @@ const userSchema = new Schema<IUser>(
       required: function (this: { isOauth?: boolean }) {
         return !this.isOauth;
       },
+    },
+    linkedin: {
+      type: String,
+      trim: true,
+      validate: {
+        validator: (value: string) =>
+          !value || validator.isURL(value, { require_protocol: true }),
+        message: "Please provide a valid LinkedIn URL",
+      },
+    },
+    github: {
+      type: String,
+      trim: true,
+      validate: {
+        validator: (value: string) =>
+          !value || validator.isURL(value, { require_protocol: true }),
+        message: "Please provide a valid GitHub URL",
+      },
+    },
+    bio: {
+      type: String,
+      trim: true,
+      maxlength: 160,
+    },
+    about: {
+      type: String,
+      trim: true,
+      maxlength: 1000,
+    },
+    location: {
+      type: String,
+      trim: true,
+      maxlength: 100,
+    },
+    techStacks: {
+      type: [String],
+      default: [],
     },
   },
   { timestamps: true }

@@ -62,7 +62,7 @@ export default function SideBar() {
       >
         {/* Logo and Website Name */}
         <div className="flex items-center px-4 mb-6">
-          <MessageSquareCode size={36} className="text-blue-400 mt-1" />
+          <MessageSquareCode size={36} className="text-blue-400" />
           <span
             className={`ml-2 text-3xl font-bold text-white transition-all duration-300
               ${open ? "opacity-100 w-auto" : "opacity-0 w-0"}

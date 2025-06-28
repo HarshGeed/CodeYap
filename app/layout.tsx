@@ -38,7 +38,7 @@ export default function RootLayout({
           className={`${geistSans.variable} ${geistMono.variable} `}
         >
           <SideBar/>
-          <div className="ml-[6rem]">
+          <div className="ml-[5rem]">
           {children}
           </div>
         </body>
