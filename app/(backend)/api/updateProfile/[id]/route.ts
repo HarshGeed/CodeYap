@@ -12,7 +12,6 @@ export const PATCH = async (req: NextRequest, { params }: { params: { id: string
     [
       "username",
       "profileImage",
-      "email",
       "linkedin",
       "github",
       "bio",
