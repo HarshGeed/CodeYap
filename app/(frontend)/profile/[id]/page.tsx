@@ -5,6 +5,7 @@ import { MapPin } from "lucide-react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import React, { useEffect, useState } from "react";
+import EditProfileModal from "@/components/EditProfileModal";
 
 interface UserProfile {
   _id: string;
@@ -28,6 +29,19 @@ export default function ProfilePage({ params }: { params: Promise<{ id: string }
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
+
+  const handleSave = async (updated: Partial<UserProfile>) => {
+    const res = await fetch(`/api/updateProfile/${profileUserId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(updated),
+    });
+    if (res.ok) {
+      const updatedUser = await res.json();
+      setUser(updatedUser);
+    }
+  };
 
   useEffect(() => {
     setLoading(true);
@@ -77,9 +91,17 @@ export default function ProfilePage({ params }: { params: Promise<{ id: string }
 
             {/* if user is viewing then edit profile button else connect button  */}
             {isOwnProfile ? (
-              <button className="p-2 rounded-xl bg-blue-700 text-white mt-4 w-full">
+              <>
+              <button className="p-2 rounded-xl bg-blue-700 text-white mt-4 w-full" onClick={() => setModalOpen(true)}>
                 Edit Profile
               </button>
+              <EditProfileModal
+        user={user}
+        isOpen={modalOpen}
+        onClose={() => setModalOpen(false)}
+        onSave={handleSave}
+      />
+      </>
             ) : (
               <button className="p-2 rounded-xl bg-green-700 text-white mt-4 w-full">
                 Connect
