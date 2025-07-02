@@ -15,6 +15,7 @@ export interface IUser extends Document {
   about?: string;
   location?: string;
   techStacks?: string[];
+  connections?: string[];
 }
 
 const userSchema = new Schema<IUser>(
@@ -85,6 +86,7 @@ const userSchema = new Schema<IUser>(
       type: [String],
       default: [],
     },
+    connections: [{type: mongoose.Schema.Types.ObjectId, ref: "User"}],
   },
   { timestamps: true }
 );

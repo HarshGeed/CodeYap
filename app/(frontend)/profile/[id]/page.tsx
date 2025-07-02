@@ -1,4 +1,4 @@
-'use client'
+"use client";
 import default_pfp from "@/public/default_pfp.jpg";
 import Image from "next/image";
 import { MapPin } from "lucide-react";
@@ -20,7 +20,11 @@ interface UserProfile {
   techStacks?: string[];
 }
 
-export default function ProfilePage({ params }: { params: Promise<{ id: string }> }) {
+export default function ProfilePage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
   const { data: session } = useSession();
   const { id: profileUserId } = React.use(params);
   const loggedInUserId = session?.user?.id;
@@ -30,6 +34,9 @@ export default function ProfilePage({ params }: { params: Promise<{ id: string }
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  const [requestStatus, setRequestStatus] = useState<
+    "none" | "requested" | "connected"
+  >("none");
 
   const handleSave = async (updated: Partial<UserProfile>) => {
     const res = await fetch(`/api/updateProfile/${profileUserId}`, {
@@ -41,6 +48,19 @@ export default function ProfilePage({ params }: { params: Promise<{ id: string }
       const updatedUser = await res.json();
       setUser(updatedUser);
     }
+  };
+
+  const handleConnect = async () => {
+    setRequestStatus("requested");
+    await fetch("/api/notifications/sendInvite", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        toUserId: profileUserId,
+        fromUserId: loggedInUserId,
+        fromUsername: session?.user?.name,
+      }),
+    });
   };
 
   useEffect(() => {
@@ -68,7 +88,11 @@ export default function ProfilePage({ params }: { params: Promise<{ id: string }
   }
 
   if (error || !user) {
-    return <div className="mx-[11rem] mt-10 text-red-500">Error: {error || "User not found"}</div>;
+    return (
+      <div className="mx-[11rem] mt-10 text-red-500">
+        Error: {error || "User not found"}
+      </div>
+    );
   }
 
   return (
@@ -92,18 +116,31 @@ export default function ProfilePage({ params }: { params: Promise<{ id: string }
             {/* if user is viewing then edit profile button else connect button  */}
             {isOwnProfile ? (
               <>
-              <button className="p-2 rounded-xl bg-blue-700 text-white mt-4 w-full" onClick={() => setModalOpen(true)}>
-                Edit Profile
+                <button
+                  className="p-2 rounded-xl bg-blue-700 text-white mt-4 w-full"
+                  onClick={() => setModalOpen(true)}
+                >
+                  Edit Profile
+                </button>
+                <EditProfileModal
+                  user={user}
+                  isOpen={modalOpen}
+                  onClose={() => setModalOpen(false)}
+                  onSave={handleSave}
+                />
+              </>
+            ) : requestStatus === "requested" ? (
+              <button
+                className="p-2 rounded-xl bg-gray-500 text-white mt-4 w-full"
+                disabled
+              >
+                Requested
               </button>
-              <EditProfileModal
-        user={user}
-        isOpen={modalOpen}
-        onClose={() => setModalOpen(false)}
-        onSave={handleSave}
-      />
-      </>
             ) : (
-              <button className="p-2 rounded-xl bg-green-700 text-white mt-4 w-full">
+              <button
+                className="p-2 rounded-xl bg-green-700 text-white mt-4 w-full"
+                onClick={handleConnect}
+              >
                 Connect
               </button>
             )}
