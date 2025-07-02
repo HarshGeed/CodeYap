@@ -15,24 +15,30 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
   const {data: session} = useSession();
 
-  const userId = session?.user?.id;
+useEffect(() => {
+  if (!session?.user?.id) {
+    console.log("userId not available yet");
+    return;
+  }
 
-  useEffect(() => {
-    if(!userId) console.log("no userid available");
-    console.log("userId in effect", userId);
-    async function fetchConnections() {
-      setLoading(true);
-      try {
-        const res = await fetch(`/api/connections/${userId}`);
-        const data = await res.json();
-        setConnectedUsers(data);
-      } catch {
-        setConnectedUsers([]);
-      }
+  const userId = session.user.id; // NOW safe to use
+
+  async function fetchConnections() {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/connections/${userId}`);
+      const data = await res.json();
+      setConnectedUsers(data);
+    } catch {
+      setConnectedUsers([]);
+    } finally {
       setLoading(false);
     }
-    fetchConnections();
-  }, [userId]);
+  }
+
+  fetchConnections();
+}, [session]);
+
 
   return (
     <>
