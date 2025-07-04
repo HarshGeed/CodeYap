@@ -21,6 +21,34 @@ export default function HomePage() {
   const [newMessage, setNewMessage] = useState("");
   const socketRef = useRef<any>(null);
 
+  // Format time as "2:15 PM"
+  function formatTime(dateStr: string) {
+    const date = new Date(dateStr);
+    return date.toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    });
+  }
+
+  // Format date as "Today" or "DD MMM YYYY"
+  function formatDate(dateStr: string) {
+    const date = new Date(dateStr);
+    const today = new Date();
+    if (
+      date.getDate() === today.getDate() &&
+      date.getMonth() === today.getMonth() &&
+      date.getFullYear() === today.getFullYear()
+    ) {
+      return "Today";
+    }
+    return date.toLocaleDateString(undefined, {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  }
+
   // Connect socket once
   useEffect(() => {
     if (!socketRef.current) {
@@ -101,12 +129,10 @@ export default function HomePage() {
     const msgObj = {
       roomId,
       message: newMessage,
-      sender: session?.user?.id,
-      receiver: selectedUser._id,
+      senderId: session?.user?.id,
+      receiverId: selectedUser._id,
       timestamp: new Date().toISOString(),
     };
-    // // Optimistically add to UI
-    // setMessages((prev) => [...prev, msgObj]);
 
     socketRef.current.emit("send-message", msgObj);
 
@@ -176,27 +202,49 @@ export default function HomePage() {
                 <div className="font-bold text-xl mb-2">
                   Chat with {selectedUser.username}
                 </div>
+
                 <div className="flex-1 overflow-y-auto bg-[#232735] p-4 rounded">
-                  {messages.map((msg, idx) => (
-                    <div
-                      key={idx}
-                      className={`mb-2 ${
-                        msg.sender === session?.user?.id
-                          ? "text-right"
-                          : "text-left"
-                      }`}
-                    >
-                      <span
-                        className={`inline-block px-3 py-1 rounded ${
-                          msg.sender === session?.user?.id
-                            ? "bg-blue-600 text-white"
-                            : "bg-gray-700 text-white"
-                        }`}
-                      >
-                        {msg.message}
-                      </span>
-                    </div>
-                  ))}
+                  {(() => {
+                    let lastDate = "";
+                    return messages.map((msg, idx) => {
+                      const msgDate = new Date(msg.timestamp).toDateString();
+                      const showDate =
+                        idx === 0 ||
+                        msgDate !==
+                          new Date(messages[idx - 1].timestamp).toDateString();
+                      return (
+                        <div key={idx}>
+                          {showDate && (
+                            <div className="flex justify-center my-2">
+                              <span className="bg-gray-600 text-white text-xs px-3 py-1 rounded-full">
+                                {formatDate(msg.timestamp)}
+                              </span>
+                            </div>
+                          )}
+                          <div
+                            className={`mb-2 ${
+                              (msg.sender || msg.senderId) === session?.user?.id
+                                ? "text-right"
+                                : "text-left"
+                            }`}
+                          >
+                            <span
+                              className={`inline-block px-3 py-1 rounded ${
+                                (msg.senderId || msg.sender) === session?.user?.id
+                                  ? "bg-blue-600 text-white"
+                                  : "bg-gray-700 text-white"
+                              }`}
+                            >
+                              {msg.message}
+                              <span className="inline-block text-[11px] text-gray-300 mt-1 text-right pl-3">
+                                {formatTime(msg.timestamp)}
+                              </span>
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    });
+                  })()}
                 </div>
                 <div className="flex mt-2">
                   <input
