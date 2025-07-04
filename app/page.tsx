@@ -145,130 +145,128 @@ export default function HomePage() {
     setNewMessage("");
   };
 
-  return (
-    <>
-      <div className="grid grid-cols-[1fr_3fr] gap-2 h-screen">
-        {/* 1st grid */}
-        <div className="overflow-y-auto">
-          <div className="flex mt-3">
-            <h1 className="font-semibold text-3xl">Chats</h1>
-            <button className="ml-auto bg-[#2b4a7b] text-white px-2 py-auto rounded">
-              New Chat
-            </button>
-          </div>
-
-          {/* Users which are connected */}
-          <div className="mt-6">
-            {loading ? (
-              <div className="text-gray-400">Loading...</div>
-            ) : connectedUsers.length === 0 ? (
-              <div className="text-gray-400">No connections yet.</div>
-            ) : (
-              <ul className="space-y-3">
-                {connectedUsers.map((user) => (
-                  <li
-                    key={user._id}
-                    className="flex items-center gap-3 bg-[#232735] p-3 rounded-xl cursor-pointer"
-                    onClick={() => handleUserClick(user)}
-                  >
-                    <div className="h-[3.5rem] w-[3.5rem] bg-[#41403e] rounded-full relative">
-                      <Image
-                        src={user.profileImage || default_pfp}
-                        alt="Profile pic"
-                        fill
-                        style={{ objectFit: "cover", borderRadius: "9999px" }}
-                      />
-                    </div>
-                    <div>
-                      <div className="font-medium text-[1rem]">
-                        {user.username}
-                      </div>
-                      <div className="text-xs text-gray-400">
-                        {user.lastMessage || "No messages yet."}
-                      </div>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
+return (
+  <>
+    <div className="grid grid-cols-[1fr_3fr] h-[calc(100vh-1.5rem)] gap-4 my-3">
+      {/* 1st grid */}
+      <div className="h-full overflow-y-auto bg-gradient-to-b from-[#1e293b] to-[#0f172a] rounded-2xl px-4 py-3 shadow-2xl border border-[#22304a]/30">
+        <div className="flex items-center mb-6">
+          <h1 className="font-semibold text-3xl text-[#60a5fa] tracking-wide">Chats</h1>
+          <button className="ml-auto bg-[#2563eb] hover:bg-[#1d4ed8] text-white px-4 py-1 rounded-lg shadow transition">
+            New Chat
+          </button>
         </div>
-        {/* 2nd grid */}
-        <div>
-          {/* Column 2 */}
-          <div className="h-full flex flex-col">
-            {selectedUser ? (
-              <div className="flex flex-col h-full">
-                <div className="font-bold text-xl mb-2">
-                  Chat with {selectedUser.username}
-                </div>
-
-                <div className="flex-1 overflow-y-auto bg-[#232735] p-4 rounded">
-                  {(() => {
-                    let lastDate = "";
-                    return messages.map((msg, idx) => {
-                      const msgDate = new Date(msg.timestamp).toDateString();
-                      const showDate =
-                        idx === 0 ||
-                        msgDate !==
-                          new Date(messages[idx - 1].timestamp).toDateString();
-                      return (
-                        <div key={idx}>
-                          {showDate && (
-                            <div className="flex justify-center my-2">
-                              <span className="bg-gray-600 text-white text-xs px-3 py-1 rounded-full">
-                                {formatDate(msg.timestamp)}
-                              </span>
-                            </div>
-                          )}
-                          <div
-                            className={`mb-2 ${
-                              (msg.sender || msg.senderId) === session?.user?.id
-                                ? "text-right"
-                                : "text-left"
-                            }`}
-                          >
-                            <span
-                              className={`inline-block px-3 py-1 rounded ${
-                                (msg.senderId || msg.sender) === session?.user?.id
-                                  ? "bg-blue-600 text-white"
-                                  : "bg-gray-700 text-white"
-                              }`}
-                            >
-                              {msg.message}
-                              <span className="inline-block text-[11px] text-gray-300 mt-1 text-right pl-3">
-                                {formatTime(msg.timestamp)}
-                              </span>
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    });
-                  })()}
-                </div>
-                <div className="flex mt-2">
-                  <input
-                    className="flex-1 rounded-l px-2 py-1"
-                    value={newMessage}
-                    onChange={(e) => setNewMessage(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
-                  />
-                  <button
-                    className="bg-blue-600 text-white px-4 py-1 rounded-r"
-                    onClick={handleSendMessage}
-                  >
-                    Send
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="text-gray-400 flex items-center justify-center h-full">
-                Select a user to start chatting.
-              </div>
-            )}
-          </div>
+        {/* Users which are connected */}
+        <div className="mt-2">
+          {loading ? (
+            <div className="text-gray-400">Loading...</div>
+          ) : connectedUsers.length === 0 ? (
+            <div className="text-gray-500">No connections yet.</div>
+          ) : (
+            <ul className="space-y-3">
+              {connectedUsers.map((user) => (
+                <li
+                  key={user._id}
+                  className="flex items-center gap-3 bg-[#172033] hover:bg-[#22304a] p-3 rounded-xl cursor-pointer transition"
+                  onClick={() => handleUserClick(user)}
+                >
+                  <div className="h-14 w-14 bg-[#22304a] rounded-full relative border-2 border-[#2563eb]/30">
+                    <Image
+                      src={user.profileImage || default_pfp}
+                      alt="Profile pic"
+                      fill
+                      style={{ objectFit: "cover", borderRadius: "9999px" }}
+                    />
+                  </div>
+                  <div>
+                    <div className="font-medium text-base text-[#e0e7ef]">
+                      {user.username}
+                    </div>
+                    <div className="text-xs text-[#60a5fa]/80">
+                      {user.lastMessage || "No messages yet."}
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       </div>
-    </>
-  );
+      {/* 2nd grid */}
+      <div className="h-full overflow-y-auto">
+        {/* Column 2 */}
+        <div className="h-full flex flex-col bg-gradient-to-b from-[#1e293b] to-[#0f172a] rounded-2xl border border-[#22304a]/30 shadow-2xl">
+          {selectedUser ? (
+            <div className="flex flex-col h-full">
+              <div className="font-bold text-2xl mb-2 pt-4 px-4 text-[#60a5fa] tracking-wide">
+                Chat with {selectedUser.username}
+              </div>
+              <div className="flex-1 overflow-y-auto p-4 rounded">
+                {(() => {
+                  return messages.map((msg, idx) => {
+                    const msgDate = new Date(msg.timestamp).toDateString();
+                    const showDate =
+                      idx === 0 ||
+                      msgDate !==
+                        new Date(messages[idx - 1].timestamp).toDateString();
+                    return (
+                      <div key={idx}>
+                        {showDate && (
+                          <div className="flex justify-center my-2">
+                            <span className="bg-[#22304a] text-[#60a5fa] text-xs px-4 py-1 rounded-full shadow">
+                              {formatDate(msg.timestamp)}
+                            </span>
+                          </div>
+                        )}
+                        <div
+                          className={`mb-2 flex ${
+                            (msg.sender || msg.senderId) === session?.user?.id
+                              ? "justify-end"
+                              : "justify-start"
+                          }`}
+                        >
+                          <span
+                            className={`max-w-[70%] break-words px-4 py-2 rounded-2xl shadow ${
+                              (msg.senderId || msg.sender) === session?.user?.id
+                                ? "bg-[#2563eb] text-white rounded-br-sm"
+                                : "bg-[#22304a] text-[#e0e7ef] rounded-bl-sm"
+                            }`}
+                          >
+                            {msg.message}
+                            <span className="block text-[11px] text-[#93c5fd] mt-1 text-right">
+                              {formatTime(msg.timestamp)}
+                            </span>
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+              <div className="flex mt-2 px-4 pb-4">
+                <input
+                  className="flex-1 rounded-l-lg px-3 py-2 bg-[#172033] text-[#e0e7ef] placeholder:text-[#64748b] border border-[#22304a] focus:outline-none focus:ring-2 focus:ring-[#2563eb] transition"
+                  value={newMessage}
+                  onChange={(e) => setNewMessage(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
+                  placeholder="Type your message..."
+                />
+                <button
+                  className="bg-[#2563eb] hover:bg-[#1d4ed8] text-white px-6 py-2 rounded-r-lg shadow transition"
+                  onClick={handleSendMessage}
+                >
+                  Send
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="text-gray-400 flex items-center justify-center h-full text-lg">
+              Select a user to start chatting.
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  </>
+);
 }
