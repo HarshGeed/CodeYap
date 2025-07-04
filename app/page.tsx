@@ -149,9 +149,9 @@ return (
   <>
     <div className="grid grid-cols-[1fr_3fr] h-[calc(100vh-1.5rem)] gap-4 my-3">
       {/* 1st grid */}
-      <div className="h-full overflow-y-auto bg-gradient-to-b from-[#1e293b] to-[#0f172a] rounded-2xl px-4 py-3 shadow-2xl border border-[#22304a]/30">
+      <div className="h-full overflow-y-auto bg-gradient-to-b from-[#1b1f27] to-[#0a0a0a] rounded-2xl px-4 py-3 shadow-2xl border border-[#22304a]/30">
         <div className="flex items-center mb-6">
-          <h1 className="font-semibold text-3xl text-[#60a5fa] tracking-wide">Chats</h1>
+          <h1 className="font-semibold text-3xl text-[#7e90a7] tracking-wide">Chats</h1>
           <button className="ml-auto bg-[#2563eb] hover:bg-[#1d4ed8] text-white px-4 py-1 rounded-lg shadow transition">
             New Chat
           </button>
@@ -167,7 +167,7 @@ return (
               {connectedUsers.map((user) => (
                 <li
                   key={user._id}
-                  className="flex items-center gap-3 bg-[#172033] hover:bg-[#22304a] p-3 rounded-xl cursor-pointer transition"
+                  className="flex items-center gap-3 bg-[#282d38] hover:bg-[#22304a] p-3 rounded-xl cursor-pointer transition"
                   onClick={() => handleUserClick(user)}
                 >
                   <div className="h-14 w-14 bg-[#22304a] rounded-full relative border-2 border-[#2563eb]/30">
@@ -195,10 +195,10 @@ return (
       {/* 2nd grid */}
       <div className="h-full overflow-y-auto">
         {/* Column 2 */}
-        <div className="h-full flex flex-col bg-gradient-to-b from-[#1e293b] to-[#0f172a] rounded-2xl border border-[#22304a]/30 shadow-2xl">
+        <div className="h-full flex flex-col bg-gradient-to-b from-[#1b1f27] to-[#0a0a0a] rounded-2xl border border-[#22304a]/30 shadow-2xl">
           {selectedUser ? (
             <div className="flex flex-col h-full">
-              <div className="font-bold text-2xl mb-2 pt-4 px-4 text-[#60a5fa] tracking-wide">
+              <div className="font-bold text-2xl mb-2 pt-4 px-4 text-[#c0cad6] tracking-wide">
                 Chat with {selectedUser.username}
               </div>
               <div className="flex-1 overflow-y-auto p-4 rounded">
@@ -228,7 +228,7 @@ return (
                           <span
                             className={`max-w-[70%] break-words px-4 py-2 rounded-2xl shadow ${
                               (msg.senderId || msg.sender) === session?.user?.id
-                                ? "bg-[#2563eb] text-white rounded-br-sm"
+                                ? "bg-[#3f495f] text-white rounded-br-sm"
                                 : "bg-[#22304a] text-[#e0e7ef] rounded-bl-sm"
                             }`}
                           >
@@ -245,7 +245,7 @@ return (
               </div>
               <div className="flex mt-2 px-4 pb-4">
                 <input
-                  className="flex-1 rounded-l-lg px-3 py-2 bg-[#172033] text-[#e0e7ef] placeholder:text-[#64748b] border border-[#22304a] focus:outline-none focus:ring-2 focus:ring-[#2563eb] transition"
+                  className="flex-1 rounded-l-lg px-3 py-2 bg-[#171b24] text-[#e0e7ef] placeholder:text-[#64748b] border border-[#22304a] focus:outline-none focus:ring-2 focus:ring-[#2563eb] transition"
                   value={newMessage}
                   onChange={(e) => setNewMessage(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}

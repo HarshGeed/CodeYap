@@ -28,32 +28,32 @@ export default function SideBar() {
   >([]);
   const [hasUnread, setHasUnread] = useState(false);
 
-   const handleAcceptInvite = async (notif: any) => {
-  // Call your backend to accept the invite
-  await fetch("/api/connections/acceptInvite", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      userId,
-      fromUserId: notif.meta?.fromUserId,
-      notificationId: notif.id,
-    }),
-  });
-  // Update the notification message and mark as accepted
-  setNotifications((prev) =>
-    prev.map((n) =>
-      n.id === notif.id
-        ? {
-            ...n,
-            message: `You accepted ${notif.meta?.fromUsername}'s request.`,
-            meta: { ...n.meta, accepted: true },
-          }
-        : n
-    )
-  );
-};
+  const handleAcceptInvite = async (notif: any) => {
+    // Call your backend to accept the invite
+    await fetch("/api/connections/acceptInvite", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId,
+        fromUserId: notif.meta?.fromUserId,
+        notificationId: notif.id,
+      }),
+    });
+    // Update the notification message and mark as accepted
+    setNotifications((prev) =>
+      prev.map((n) =>
+        n.id === notif.id
+          ? {
+              ...n,
+              message: `You accepted ${notif.meta?.fromUsername}'s request.`,
+              meta: { ...n.meta, accepted: true },
+            }
+          : n
+      )
+    );
+  };
 
-   const handleRejectInvite = async (notif: any) => {
+  const handleRejectInvite = async (notif: any) => {
     // Call your backend to reject the invite
     await fetch("/api/connections/rejectInvite", {
       method: "POST",
@@ -66,7 +66,6 @@ export default function SideBar() {
     // Remove the notification from state
     setNotifications((prev) => prev.filter((n) => n.id !== notif.id));
   };
-
 
   // Fetch notifications from API
   useEffect(() => {
@@ -101,7 +100,13 @@ export default function SideBar() {
   };
 
   const topOptions = [
-    { icon: <MessageSquare size={24} />, label: "Chats", onClick: undefined },
+    {
+      icon: <MessageSquare size={24} />,
+      label: "Chats",
+      onClick: () => {
+        // handle navigation to chats
+      },
+    },
     {
       icon: (
         <span className="relative">
@@ -117,8 +122,20 @@ export default function SideBar() {
   ];
 
   const bottomOptions = [
-    { icon: <User size={24} />, label: "Profile" },
-    { icon: <Settings size={24} />, label: "Settings" },
+    {
+      icon: <User size={24} />,
+      label: "Profile",
+      onClick: () => {
+        // handle navigation to profile
+      },
+    },
+    {
+      icon: <Settings size={24} />,
+      label: "Settings",
+      onClick: () => {
+        // handle navigation to settings
+      },
+    },
   ];
 
   return (
@@ -131,22 +148,24 @@ export default function SideBar() {
       {/* Sidebar */}
       <div
         ref={sidebarRef}
-        className={`fixed top-0 left-0 h-full flex flex-col bg-[#1f1f1f] shadow-lg z-50 py-4 transition-all duration-300
-          ${open ? "w-48" : "w-16"}`}
+        className={`fixed top-0 left-0 h-full flex flex-col bg-gradient-to-b from-[#181e29]/90 to-[#10141a]/90 shadow-2xl z-50 py-6 px-2 transition-all duration-300
+        ${open ? "w-56" : "w-16"}
+        backdrop-blur-md border-r border-[#22304a]/40
+      `}
         style={{
           pointerEvents: "auto",
-          opacity: open ? 1 : 0.85,
+          opacity: open ? 1 : 0.92,
         }}
         onMouseEnter={() => setOpen(true)}
         onMouseLeave={() => setOpen(false)}
       >
         {/* Logo and Website Name */}
-        <div className="flex items-center px-4 mb-6">
-          <MessageSquareCode size={36} className="text-blue-400" />
+        <div className="flex items-center px-2 mb-8">
+          <MessageSquareCode size={36} className="text-[#60a5fa] drop-shadow" />
           <span
             className={`ml-2 text-3xl font-bold text-white transition-all duration-300
-              ${open ? "opacity-100 w-auto" : "opacity-0 w-0"}
-            ${bebas.className}`}
+            ${open ? "opacity-100 w-auto" : "opacity-0 w-0"}
+          ${bebas.className}`}
             style={{
               display: "inline-block",
               whiteSpace: "nowrap",
@@ -162,20 +181,25 @@ export default function SideBar() {
           {topOptions.map((opt, idx) => (
             <button
               key={idx}
-              className={`flex items-center gap-3 px-4 py-2 text-gray-200 hover:text-blue-400 focus:outline-none transition-all duration-300
-                ${open ? "" : "justify-center cursor-default"}
+              className={`flex items-center gap-3 px-4 py-2 rounded-xl
+              text-[#e0e7ef] hover:text-[#60a5fa] hover:bg-[#22304a]/60
+              focus:outline-none transition-all duration-300
+              ${open ? "" : "justify-center cursor-default"}
+              shadow-sm
               `}
               title={opt.label}
               tabIndex={open ? 0 : -1}
               aria-label={opt.label}
               disabled={!open}
               onClick={opt.onClick}
+              // Optionally add active state:
+              // style={idx === activeIdx ? { background: "#22304a", color: "#60a5fa" } : {}}
             >
               {opt.icon}
               <span
                 className={`overflow-hidden transition-all duration-300
-                  ${open ? "opacity-100 w-auto ml-2" : "opacity-0 w-0 ml-0"}
-                `}
+                ${open ? "opacity-100 w-auto ml-2" : "opacity-0 w-0 ml-0"}
+              `}
                 style={{ display: "inline-block" }}
               >
                 {opt.label}
@@ -189,7 +213,7 @@ export default function SideBar() {
 
         {/* Divider above bottom buttons */}
         <div
-          className={`w-4/5 mx-auto my-2 border-t border-gray-700 transition-all duration-300 ${
+          className={`w-4/5 mx-auto my-2 border-t border-[#22304a]/60 transition-all duration-300 ${
             open ? "opacity-100" : "opacity-0"
           }`}
         />
@@ -199,19 +223,25 @@ export default function SideBar() {
           {bottomOptions.map((opt, idx) => (
             <button
               key={opt.label}
-              className={`flex items-center gap-3 px-4 py-2 text-gray-200 hover:text-blue-400 focus:outline-none transition-all duration-300
-                ${open ? "" : "justify-center cursor-default"}
-              `}
+              className={`flex items-center px-0 py-2 rounded-xl
+    text-[#e0e7ef] hover:text-[#60a5fa] hover:bg-[#22304a]/60
+    focus:outline-none transition-all duration-300
+    ${open ? "gap-3 px-4 w-full justify-start" : "justify-center w-12 h-12"}
+    shadow-sm
+    `}
               title={opt.label}
               tabIndex={open ? 0 : -1}
               aria-label={opt.label}
-              disabled={!open}
+              disabled={!open && opt.label === "Notifications" ? false : !open}
+              onClick={opt.onClick}
             >
-              {opt.icon}
+              <span className="flex items-center justify-center w-6 h-6">
+                {opt.icon}
+              </span>
               <span
                 className={`overflow-hidden transition-all duration-300
-                  ${open ? "opacity-100 w-auto ml-2" : "opacity-0 w-0 ml-0"}
-                `}
+      ${open ? "opacity-100 w-auto ml-2" : "opacity-0 w-0 ml-0"}
+    `}
                 style={{ display: "inline-block" }}
               >
                 {opt.label}
