@@ -19,12 +19,9 @@ io.on("connection", (socket) => {
     console.log(`Socket ${socket.id} joined room ${roomId}`);
   });
 
-  socket.on("send-message", ({ roomId, message, sender }) => {
-    io.to(roomId).emit("receive-message", {
-      message,
-      sender,
-      timestamp: new Date().toISOString(),
-    });
+  socket.on("send-message", (msgObj) => {
+    // msgObj should include roomId, message, sender, receiver, timestamp, etc.
+    io.to(msgObj.roomId).emit("receive-message", msgObj);
   });
 
   socket.on("disconnect", () => {

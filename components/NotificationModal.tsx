@@ -71,7 +71,7 @@ console.log(notifications);
               >
                 <div>
                   <div>{n.message}</div>
-                  {n.meta?.type === "invite" && (
+                  {n.meta?.type === "invite" && !n.meta?.accepted &&(
                     <div className="flex gap-2 mt-2">
                       <button
                         className="px-2 py-1 bg-green-600 text-white rounded"

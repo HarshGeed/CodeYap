@@ -29,19 +29,29 @@ export default function SideBar() {
   const [hasUnread, setHasUnread] = useState(false);
 
    const handleAcceptInvite = async (notif: any) => {
-    // Call your backend to accept the invite
-    await fetch("/api/connections/acceptInvite", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        userId,
-        fromUserId: notif.meta?.fromUserId,
-        notificationId: notif.id,
-      }),
-    });
-    // Remove the notification from state
-    setNotifications((prev) => prev.filter((n) => n.id !== notif.id));
-  };
+  // Call your backend to accept the invite
+  await fetch("/api/connections/acceptInvite", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      userId,
+      fromUserId: notif.meta?.fromUserId,
+      notificationId: notif.id,
+    }),
+  });
+  // Update the notification message and mark as accepted
+  setNotifications((prev) =>
+    prev.map((n) =>
+      n.id === notif.id
+        ? {
+            ...n,
+            message: `You accepted ${notif.meta?.fromUsername}'s request.`,
+            meta: { ...n.meta, accepted: true },
+          }
+        : n
+    )
+  );
+};
 
    const handleRejectInvite = async (notif: any) => {
     // Call your backend to reject the invite
