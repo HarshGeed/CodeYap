@@ -28,6 +28,13 @@ export default function HomePage() {
   const [searchLoading, setSearchLoading] = useState(false);
   const [groups, setGroups] = useState<any[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<any>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (bottomRef.current) {
+      bottomRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages]);
 
   const handleGroupClick = (group: any) => {
     setSelectedUser(null); // Deselect individual user
@@ -93,23 +100,21 @@ export default function HomePage() {
   }, []);
 
   useEffect(() => {
-  if (!session?.user?.id) return;
+    if (!session?.user?.id) return;
 
-  const fetchGroups = async () => {
-    try {
-      const res = await fetch(`/api/groups/for-user/${session?.user?.id}`);
-      if (!res.ok) throw new Error("Failed to fetch groups");
-      const data = await res.json();
-      setGroups(data);
-    } catch (err) {
-      console.error(err);
-    }
-  };
+    const fetchGroups = async () => {
+      try {
+        const res = await fetch(`/api/groups/for-user/${session?.user?.id}`);
+        if (!res.ok) throw new Error("Failed to fetch groups");
+        const data = await res.json();
+        setGroups(data);
+      } catch (err) {
+        console.error(err);
+      }
+    };
 
-  fetchGroups();
-}, [session?.user?.id]);
-
-
+    fetchGroups();
+  }, [session?.user?.id]);
 
   // Fetch connections when session is ready
   useEffect(() => {
@@ -176,6 +181,7 @@ export default function HomePage() {
 
   const handleUserClick = (user: ConnectedUser) => {
     setSelectedUser(user);
+    setSelectedGroup(null);
   };
 
   const handleSendMessage = async () => {
@@ -383,6 +389,7 @@ export default function HomePage() {
                       );
                     });
                   })()}
+                  <div ref={bottomRef} />
                 </div>
                 <div className="flex mt-2 px-4 pb-4">
                   <input

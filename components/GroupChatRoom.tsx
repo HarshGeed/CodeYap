@@ -26,6 +26,7 @@ export default function GroupChatRoom({ group, session }: GroupChatRoomProps) {
   const [messages, setMessages] = useState<GroupMessage[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const socketRef = useRef<any>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
 
   function formatTime(dateStr: string) {
     const date = new Date(dateStr);
@@ -53,6 +54,13 @@ export default function GroupChatRoom({ group, session }: GroupChatRoomProps) {
     });
   }
 
+  // Scroll to bottom when messages change
+  useEffect(() => {
+    if (bottomRef.current) {
+      bottomRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages]);
+
   useEffect(() => {
     if (!group?._id || !session?.user?.id) return;
 
@@ -69,8 +77,8 @@ export default function GroupChatRoom({ group, session }: GroupChatRoomProps) {
         .then((res) => res.json())
         .then(setMessages);
 
+      // Remove any previous handler before adding a new one
       socket.off("receive-group-message");
-      
       const handler = (msg: GroupMessage) => {
         if (msg.groupId === group._id) {
           setMessages((prev) => [...prev, msg]);
@@ -131,58 +139,61 @@ export default function GroupChatRoom({ group, session }: GroupChatRoomProps) {
             No messages yet.
           </div>
         ) : (
-          messages.map((msg, idx) => {
-            const msgDate = new Date(msg.timestamp).toDateString();
-            const showDate =
-              idx === 0 ||
-              msgDate !== new Date(messages[idx - 1].timestamp).toDateString();
-            const isOwn = msg.senderId === session.user.id;
+          <>
+            {messages.map((msg, idx) => {
+              const msgDate = new Date(msg.timestamp).toDateString();
+              const showDate =
+                idx === 0 ||
+                msgDate !== new Date(messages[idx - 1].timestamp).toDateString();
+              const isOwn = msg.senderId === session.user.id;
 
-            return (
-              <div key={msg._id || idx}>
-                {showDate && (
-                  <div className="flex justify-center my-2">
-                    <span className="bg-[#22304a] text-[#60a5fa] text-xs px-4 py-1 rounded-full shadow">
-                      {formatDate(msg.timestamp)}
-                    </span>
-                  </div>
-                )}
-                <div className={`mb-2 flex ${isOwn ? "justify-end" : "justify-start"}`}>
-                  <div className="flex items-end gap-2 max-w-[70%]">
-                    {!isOwn && (
-                      <div className="h-8 w-8 rounded-full bg-[#232323] relative">
-                        <Image
-                          src={msg.senderImage || default_pfp}
-                          alt="Profile pic"
-                          fill
-                          style={{ objectFit: "cover", borderRadius: "9999px" }}
-                        />
-                      </div>
-                    )}
-                    <div>
-                      <span
-                        className={`inline-block px-4 py-2 rounded-2xl shadow ${
-                          isOwn
-                            ? "bg-[#3f495f] text-white rounded-br-sm"
-                            : "bg-[#22304a] text-[#e0e7ef] rounded-bl-sm"
-                        }`}
-                      >
-                        {msg.message}
-                        <span className="block text-[11px] text-[#93c5fd] mt-1 text-right">
-                          {formatTime(msg.timestamp)}
-                        </span>
+              return (
+                <div key={msg._id || idx}>
+                  {showDate && (
+                    <div className="flex justify-center my-2">
+                      <span className="bg-[#22304a] text-[#60a5fa] text-xs px-4 py-1 rounded-full shadow">
+                        {formatDate(msg.timestamp)}
                       </span>
+                    </div>
+                  )}
+                  <div className={`mb-2 flex ${isOwn ? "justify-end" : "justify-start"}`}>
+                    <div className="flex items-end gap-2 max-w-[70%]">
                       {!isOwn && (
-                        <div className="text-xs text-[#60a5fa]/80 mt-1 ml-1">
-                          {msg.senderName}
+                        <div className="h-8 w-8 rounded-full bg-[#232323] relative">
+                          <Image
+                            src={msg.senderImage || default_pfp}
+                            alt="Profile pic"
+                            fill
+                            style={{ objectFit: "cover", borderRadius: "9999px" }}
+                          />
                         </div>
                       )}
+                      <div>
+                        <span
+                          className={`inline-block px-4 py-2 rounded-2xl shadow ${
+                            isOwn
+                              ? "bg-[#3f495f] text-white rounded-br-sm"
+                              : "bg-[#22304a] text-[#e0e7ef] rounded-bl-sm"
+                          }`}
+                        >
+                          {msg.message}
+                          <span className="block text-[11px] text-[#93c5fd] mt-1 text-right">
+                            {formatTime(msg.timestamp)}
+                          </span>
+                        </span>
+                        {!isOwn && (
+                          <div className="text-xs text-[#60a5fa]/80 mt-1 ml-1">
+                            {msg.senderName}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            );
-          })
+              );
+            })}
+            <div ref={bottomRef} />
+          </>
         )}
       </div>
 
