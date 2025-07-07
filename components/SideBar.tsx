@@ -7,11 +7,13 @@ import {
   MessageSquareCode,
   BellRing,
   Users,
+  LogOut,
 } from "lucide-react";
 import { Bebas_Neue } from "next/font/google";
 import NotificationModal from "./NotificationModal";
 import ShowGroupDialog from "./ShowGroupDialog";
 import { useSession } from "next-auth/react";
+import { signOut } from "next-auth/react";
 
 const bebas = Bebas_Neue({
   subsets: ["latin"],
@@ -224,6 +226,13 @@ const handleRejectInvite = async (notif: any) => {
         // handle navigation to settings
       },
     },
+    {
+      icon: <LogOut size={24} />,
+      label: "Log out",
+      onClick: () => {
+       signOut()
+      },
+    },  
   ];
 
   return (

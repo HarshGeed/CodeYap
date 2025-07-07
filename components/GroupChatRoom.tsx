@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import default_pfp from "@/public/default_pfp.jpg";
+import { useSession } from "next-auth/react";
 
 interface GroupChatRoomProps {
   group: {
@@ -22,11 +23,12 @@ interface GroupMessage {
   timestamp: string;
 }
 
-export default function GroupChatRoom({ group, session }: GroupChatRoomProps) {
+export default function GroupChatRoom({ group }: GroupChatRoomProps) {
   const [messages, setMessages] = useState<GroupMessage[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const socketRef = useRef<any>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const {data: session} = useSession();
 
   function formatTime(dateStr: string) {
     const date = new Date(dateStr);
@@ -99,12 +101,14 @@ export default function GroupChatRoom({ group, session }: GroupChatRoomProps) {
 
     const msgObj: GroupMessage = {
       groupId: group._id,
-      senderId: session.user.id,
-      senderName: session.user.username,
-      senderImage: session.user.profileImage,
+      senderId: session?.user?.id,
+      senderName: session?.user?.username,
+      senderImage: session?.user?.profileImage,
       message: newMessage,
       timestamp: new Date().toISOString(),
     };
+
+    console.log("this is msbObj", msgObj);
 
     socketRef.current.emit("send-group-message", msgObj);
 

@@ -73,16 +73,19 @@ interface CustomUser extends NextAuthUser{
             username: user.name,
             email: user.email,
             isOauth: true,
+            profileImage: user.image,
           });
         }
 
         token.id = dbUser.id;
         token.email = dbUser.email;
         token.name = dbUser.username;
+        token.profileImage = dbUser.profileImage;
       } else if (user) {
         token.id = user.id;
         token.email = user.email;
         token.name = (user as CustomUser).username;
+        token.profileImage = (user as any).profileImage;
       }
       // console.log("Token after processing:", token);
       return token;
@@ -94,6 +97,8 @@ interface CustomUser extends NextAuthUser{
         id: token.id as string,
         email: token.email as string,
         name: token.name as string,
+        username: token.name as string,
+        profileImage: token.profileImage as string,
         emailVerified: new Date,
        };
       }
