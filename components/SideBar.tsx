@@ -6,15 +6,23 @@ import {
   Settings,
   MessageSquareCode,
   BellRing,
+  Users,
 } from "lucide-react";
 import { Bebas_Neue } from "next/font/google";
 import NotificationModal from "./NotificationModal";
+import ShowGroupDialog from "./ShowGroupDialog";
 import { useSession } from "next-auth/react";
 
 const bebas = Bebas_Neue({
   subsets: ["latin"],
   weight: "400",
 });
+
+interface ConnectedUser {
+  _id: string;
+  username: string;
+  profileImage?: string;
+}
 
 export default function SideBar() {
   const { data: session } = useSession();
@@ -23,13 +31,49 @@ export default function SideBar() {
   const sidebarRef = useRef<HTMLDivElement>(null);
   const [notifOpen, setNotifOpen] = useState(false);
   const [open, setOpen] = useState(false);
+  const [showGroupDialog, setShowGroupDialog] = useState(false);
+  const [groupLoading, setGroupLoading] = useState(false);
+
+  // Fetch connected users for group dialog
+  const [connectedUsers, setConnectedUsers] = useState<ConnectedUser[]>([]);
+  useEffect(() => {
+    if (!userId) return;
+    fetch(`/api/connections/${userId}`)
+      .then((res) => res.json())
+      .then((data) => setConnectedUsers(data))
+      .catch(() => setConnectedUsers([]));
+  }, [userId, showGroupDialog]);
+
   const [notifications, setNotifications] = useState<
-    { id: string; message: string; time?: string; read?: boolean }[]
+    { id: string; message: string; time?: string; read?: boolean; meta?: any }[]
   >([]);
   const [hasUnread, setHasUnread] = useState(false);
 
-  const handleAcceptInvite = async (notif: any) => {
-    // Call your backend to accept the invite
+const handleAcceptInvite = async (notif: any) => {
+  if (notif.meta?.type === "group-invite") {
+    // Accept group invite
+    await fetch("/api/connections/acceptInvite", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId,
+        notificationId: notif.id,
+        groupId: notif.meta?.groupId,
+      }),
+    });
+    setNotifications((prev) =>
+      prev.map((n) =>
+        n.id === notif.id
+          ? {
+              ...n,
+              message: `You joined the group "${notif.meta?.groupName}".`,
+              meta: { ...n.meta, accepted: true },
+            }
+          : n
+      )
+    );
+  } else {
+    // Accept connection invite
     await fetch("/api/connections/acceptInvite", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -39,7 +83,6 @@ export default function SideBar() {
         notificationId: notif.id,
       }),
     });
-    // Update the notification message and mark as accepted
     setNotifications((prev) =>
       prev.map((n) =>
         n.id === notif.id
@@ -51,10 +94,24 @@ export default function SideBar() {
           : n
       )
     );
-  };
+  }
+};
 
-  const handleRejectInvite = async (notif: any) => {
-    // Call your backend to reject the invite
+const handleRejectInvite = async (notif: any) => {
+  if (notif.meta?.type === "group-invite") {
+    // Reject group invite
+    await fetch("/api/connections/rejectInvite", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        notificationId: notif.id,
+        groupId: notif.meta?.groupId,
+        userId,
+      }),
+    });
+    setNotifications((prev) => prev.filter((n) => n.id !== notif.id));
+  } else {
+    // Reject connection invite
     await fetch("/api/connections/rejectInvite", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -63,13 +120,14 @@ export default function SideBar() {
         fromUserId: notif.meta?.fromUserId,
       }),
     });
-    // Remove the notification from state
     setNotifications((prev) => prev.filter((n) => n.id !== notif.id));
-  };
+  }
+};
 
   // Fetch notifications from API
   useEffect(() => {
     async function fetchNotifications() {
+      if (!userId) return;
       const res = await fetch(`/api/notifications/${userId}`);
       const data = await res.json();
       setNotifications(
@@ -99,25 +157,55 @@ export default function SideBar() {
     setHasUnread(false);
   };
 
+  // Group creation handler
+  const handleCreateGroup = async (groupName: string, memberIds: string[]) => {
+    setGroupLoading(true);
+    try {
+      await fetch("/api/groups/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: groupName,
+          members: memberIds,
+          creatorId: session?.user?.id,
+        }),
+      });
+    } catch (e) {
+      // Optionally show error
+    }
+    setGroupLoading(false);
+  };
+
   const topOptions = [
     {
-      icon: <MessageSquare size={24} />,
+      icon: (
+        <span className="flex items-center justify-center w-6 h-6">
+          <MessageSquare size={24} />
+        </span>
+      ),
       label: "Chats",
-      onClick: () => {
-        // handle navigation to chats
-      },
+      onClick: () => {},
     },
     {
       icon: (
-        <span className="relative">
+        <span className="relative flex items-center justify-center w-6 h-6">
           <BellRing size={24} />
           {hasUnread && (
-            <span className="absolute top-0 right-0 block h-2 w-2 rounded-full bg-red-500 ring-2 ring-[#23272f]" />
+            <span className="absolute top-0 right-0 h-2 w-2 rounded-full bg-red-500 ring-2 ring-[#23272f]" />
           )}
         </span>
       ),
       label: "Notifications",
       onClick: () => setNotifOpen(true),
+    },
+    {
+      icon: (
+        <span className="flex items-center justify-center w-6 h-6">
+          <Users size={24} />
+        </span>
+      ),
+      label: "New Group +",
+      onClick: () => setShowGroupDialog(true),
     },
   ];
 
@@ -148,7 +236,7 @@ export default function SideBar() {
       {/* Sidebar */}
       <div
         ref={sidebarRef}
-        className={`fixed top-0 left-0 h-full flex flex-col bg-gradient-to-b from-[#181e29]/90 to-[#10141a]/90 shadow-2xl z-50 py-6 px-2 transition-all duration-300
+        className={`fixed top-0 left-0 h-full flex flex-col bg-gradient-to-b from-[#181e29]/90 to-[#121212]/90 shadow-2xl z-50 py-6 px-2 transition-all duration-300
         ${open ? "w-56" : "w-16"}
         backdrop-blur-md border-r border-[#22304a]/40
       `}
@@ -181,26 +269,21 @@ export default function SideBar() {
           {topOptions.map((opt, idx) => (
             <button
               key={idx}
-              className={`flex items-center gap-3 px-4 py-2 rounded-xl
-              text-[#e0e7ef] hover:text-[#60a5fa] hover:bg-[#22304a]/60
-              focus:outline-none transition-all duration-300
-              ${open ? "" : "justify-center cursor-default"}
-              shadow-sm
-              `}
+              className={`group flex items-center px-0 py-2 rounded-xl text-[#e0e7ef]
+  hover:text-[#60a5fa] hover:bg-[#22304a]/60
+  transition-all duration-300 shadow-sm w-full`}
               title={opt.label}
               tabIndex={open ? 0 : -1}
               aria-label={opt.label}
               disabled={!open}
               onClick={opt.onClick}
-              // Optionally add active state:
-              // style={idx === activeIdx ? { background: "#22304a", color: "#60a5fa" } : {}}
             >
-              {opt.icon}
+              <span className="flex items-center justify-center w-12">
+                {opt.icon}
+              </span>
               <span
-                className={`overflow-hidden transition-all duration-300
-                ${open ? "opacity-100 w-auto ml-2" : "opacity-0 w-0 ml-0"}
-              `}
-                style={{ display: "inline-block" }}
+                className={`ml-2 whitespace-nowrap overflow-hidden transition-all duration-300
+    ${open ? "opacity-100" : "opacity-0 w-0"}`}
               >
                 {opt.label}
               </span>
@@ -250,6 +333,15 @@ export default function SideBar() {
           ))}
         </div>
       </div>
+
+      {/* ShowGroupDialog */}
+      <ShowGroupDialog
+        open={showGroupDialog}
+        onClose={() => setShowGroupDialog(false)}
+        connectedUsers={connectedUsers}
+        onCreate={handleCreateGroup}
+        loading={groupLoading}
+      />
 
       {/* Notification Modal */}
       <NotificationModal

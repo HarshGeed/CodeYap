@@ -2,20 +2,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import User from "@/models/userModel";
 import Notification from "@/models/notificationModel";
+import Group from "@/models/groupModel";
 import { connect } from "@/lib/dbConn";
 
 export const POST = async (req: NextRequest) => {
   await connect();
-  const { userId, fromUserId, notificationId } = await req.json();
+  const { userId, fromUserId, notificationId, groupId } = await req.json();
 
-  // Add each other as connections (assume connections: [userId] in user model)
+  if (groupId) {
+    // Accept group invite: add user to acceptedMembers
+    await Group.findByIdAndUpdate(groupId, { $addToSet: { acceptedMembers: userId } });
+    // Mark notification as accepted
+    await Notification.findByIdAndUpdate(notificationId, { "meta.accepted": true });
+    return NextResponse.json({ success: true, group: true });
+  }
+
+  // Accept connection invite (existing logic)
   await User.findByIdAndUpdate(userId, { $addToSet: { connections: fromUserId } });
   await User.findByIdAndUpdate(fromUserId, { $addToSet: { connections: userId } });
-
-  // Remove the invite notification
   await Notification.findByIdAndDelete(notificationId);
-
-  // Optionally, send notification to requester
   await Notification.create({
     userId: fromUserId,
     message: "Your connection request was accepted!",

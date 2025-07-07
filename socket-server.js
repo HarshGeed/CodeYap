@@ -1,12 +1,11 @@
 import { createServer } from "http";
 import { Server } from "socket.io";
 
-// If you want to serve a frontend, you can use express or next, but for pure socket:
 const httpServer = createServer();
 
 const io = new Server(httpServer, {
   cors: {
-    origin: "*", // Change this to your frontend URL in production
+    origin: "*",
     methods: ["GET", "POST"],
   },
 });
@@ -14,14 +13,29 @@ const io = new Server(httpServer, {
 io.on("connection", (socket) => {
   console.log("A user connected:", socket.id);
 
+  // Private chat room
   socket.on("join-room", (roomId) => {
     socket.join(roomId);
     console.log(`Socket ${socket.id} joined room ${roomId}`);
   });
 
   socket.on("send-message", (msgObj) => {
-    // msgObj should include roomId, message, sender, receiver, timestamp, etc.
     io.to(msgObj.roomId).emit("receive-message", msgObj);
+  });
+
+  // --- GROUP CHAT SUPPORT ---
+  socket.on("join-group", (groupId) => {
+    socket.join(groupId);
+    console.log(`Socket ${socket.id} joined group ${groupId}`);
+  });
+
+  socket.on("leave-group", (groupId) => {
+    socket.leave(groupId);
+    console.log(`Socket ${socket.id} left group ${groupId}`);
+  });
+
+  socket.on("send-group-message", (msgObj) => {
+    io.to(msgObj.groupId).emit("receive-group-message", msgObj);
   });
 
   socket.on("disconnect", () => {
