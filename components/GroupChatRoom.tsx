@@ -28,7 +28,7 @@ export default function GroupChatRoom({ group }: GroupChatRoomProps) {
   const [newMessage, setNewMessage] = useState("");
   const socketRef = useRef<any>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const {data: session} = useSession();
+  const { data: session } = useSession();
 
   function formatTime(dateStr: string) {
     const date = new Date(dateStr);
@@ -148,8 +148,11 @@ export default function GroupChatRoom({ group }: GroupChatRoomProps) {
               const msgDate = new Date(msg.timestamp).toDateString();
               const showDate =
                 idx === 0 ||
-                msgDate !== new Date(messages[idx - 1].timestamp).toDateString();
+                msgDate !==
+                  new Date(messages[idx - 1].timestamp).toDateString();
               const isOwn = msg.senderId === session.user.id;
+              const isGroupStart =
+                idx === 0 || msg.senderId !== messages[idx - 1].senderId;
 
               return (
                 <div key={msg._id || idx}>
@@ -160,18 +163,30 @@ export default function GroupChatRoom({ group }: GroupChatRoomProps) {
                       </span>
                     </div>
                   )}
-                  <div className={`mb-2 flex ${isOwn ? "justify-end" : "justify-start"}`}>
+                  <div
+                    className={`mb-2 flex ${
+                      isOwn ? "justify-end" : "justify-start"
+                    }`}
+                  >
                     <div className="flex items-end gap-2 max-w-[70%]">
-                      {!isOwn && (
-                        <div className="h-8 w-8 rounded-full bg-[#232323] relative">
-                          <Image
-                            src={msg.senderImage || default_pfp}
-                            alt="Profile pic"
-                            fill
-                            style={{ objectFit: "cover", borderRadius: "9999px" }}
-                          />
-                        </div>
-                      )}
+                      {/* Avatar or placeholder for alignment */}
+                      {!isOwn &&
+                        (isGroupStart ? (
+                          <div className="h-8 w-8 rounded-full bg-[#232323] relative flex-shrink-0">
+                            <Image
+                              src={msg.senderImage || default_pfp}
+                              alt="Profile pic"
+                              fill
+                              style={{
+                                objectFit: "cover",
+                                borderRadius: "9999px",
+                              }}
+                            />
+                          </div>
+                        ) : (
+                          // Empty space for alignment
+                          <div className="h-8 w-8" />
+                        ))}
                       <div>
                         <span
                           className={`inline-block px-4 py-2 rounded-2xl shadow ${
@@ -180,16 +195,17 @@ export default function GroupChatRoom({ group }: GroupChatRoomProps) {
                               : "bg-[#22304a] text-[#e0e7ef] rounded-bl-sm"
                           }`}
                         >
+                          {/* Show name inside bubble for group start (or single message) */}
+                          {!isOwn && isGroupStart && (
+                            <span className="block text-xs font-semibold text-[#60a5fa] mb-1">
+                              {msg.senderName}
+                            </span>
+                          )}
                           {msg.message}
-                          <span className="block text-[11px] text-[#93c5fd] mt-1 text-right">
+                          <span className="inline-block text-[11px] text-[#93c5fd] mt-1 text-right pl-2">
                             {formatTime(msg.timestamp)}
                           </span>
                         </span>
-                        {!isOwn && (
-                          <div className="text-xs text-[#60a5fa]/80 mt-1 ml-1">
-                            {msg.senderName}
-                          </div>
-                        )}
                       </div>
                     </div>
                   </div>
