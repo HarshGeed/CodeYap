@@ -4,6 +4,7 @@ import Image from "next/image";
 import default_pfp from "@/public/default_pfp.jpg";
 import { useSession } from "next-auth/react";
 import { connectSocket } from "@/lib/socket";
+import { Paperclip } from "lucide-react";
 
 interface UserChatRoomProps {
   selectedUser: any;
@@ -135,6 +136,15 @@ export default function UserChatRoom({ selectedUser }: UserChatRoomProps) {
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
+
+    // Limit to 8 files
+    if (files.length > 8) {
+      alert("You can only send a maximum of 8 files at a time.");
+      setUploading(false);
+      e.target.value = "";
+      return;
+    }
+
     setUploading(true);
 
     const formData = new FormData();
@@ -187,13 +197,15 @@ export default function UserChatRoom({ selectedUser }: UserChatRoomProps) {
           const showDate =
             idx === 0 ||
             msgDate !== new Date(messages[idx - 1].timestamp).toDateString();
-          const isOwn =
-            (msg.sender || msg.senderId) === session?.user?.id;
+          const isOwn = (msg.sender || msg.senderId) === session?.user?.id;
+
+          const type = msg.fileType || fileTypeFromUrl(msg.message);
+
           return (
             <div key={idx}>
               {showDate && (
                 <div className="flex justify-center my-2">
-                  <span className="bg-[#22304a] text-[#60a5fa] text-xs px-4 py-1 rounded-full shadow">
+                  <span className="bg-[#22304a] text-[#60a5fa] text-xs px-4 py-1 rounded-full shadow my-3">
                     {formatDate(msg.timestamp)}
                   </span>
                 </div>
@@ -203,16 +215,6 @@ export default function UserChatRoom({ selectedUser }: UserChatRoomProps) {
                   isOwn ? "justify-end" : "justify-start"
                 }`}
               >
-                {!isOwn && (
-                  <div className="h-8 w-8 rounded-full bg-[#232323] relative mr-2">
-                    <Image
-                      src={msg.senderImage || default_pfp}
-                      alt="Profile pic"
-                      fill
-                      style={{ objectFit: "cover", borderRadius: "9999px" }}
-                    />
-                  </div>
-                )}
                 <span
                   className={`max-w-[70%] break-words px-4 py-2 rounded-2xl shadow ${
                     isOwn
@@ -221,26 +223,46 @@ export default function UserChatRoom({ selectedUser }: UserChatRoomProps) {
                   }`}
                 >
                   {/* Render file or text */}
-                  {msg.fileType === "image" ? (
-                    <Image src={msg.message} alt="uploaded" className="max-w-xs max-h-60 rounded-lg" />
-                  ) : msg.fileType === "video" ? (
-                    <video src={msg.message} controls className="max-w-xs max-h-60 rounded-lg" />
-                  ) : msg.fileType === "document" ? (
-                    <a href={msg.message} target="_blank" rel="noopener noreferrer" className="underline text-blue-400">
+                  {type === "image" ? (
+                    <Image
+                      src={msg.message}
+                      alt="uploaded"
+                      width={320}
+                      height={240}
+                      style={{
+                        objectFit: "contain",
+                        borderRadius: "0.5rem",
+                        maxWidth: "20rem", // matches max-w-xs
+                        maxHeight: "15rem", // matches max-h-60
+                        width: "100%",
+                        height: "auto",
+                      }}
+                      className="rounded-lg"
+                    />
+                  ) : type === "video" ? (
+                    <video
+                      src={msg.message}
+                      controls
+                      className="max-w-xs max-h-60 rounded-lg"
+                      width={250}
+                      height={180}
+                    />
+                  ) : type === "document" ? (
+                    <a
+                      href={msg.message}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline text-blue-400"
+                    >
                       📄 Document
                     </a>
                   ) : (
                     msg.message
                   )}
-                  <span className="block text-[11px] text-[#93c5fd] mt-1 text-right">
+                  <span className="inline-block text-[11px] text-[#93c5fd] mt-1 text-right pl-2">
                     {formatTime(msg.timestamp)}
                   </span>
                 </span>
-                {!isOwn && (
-                  <div className="text-xs text-[#60a5fa]/80 mt-1 ml-1">
-                    {msg.senderName || "Unknown"}
-                  </div>
-                )}
               </div>
             </div>
           );
@@ -258,7 +280,7 @@ export default function UserChatRoom({ selectedUser }: UserChatRoomProps) {
             accept="image/*,video/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt"
             disabled={uploading}
           />
-          {uploading ? "Uploading..." : "📎"}
+          {uploading ? "Uploading..." : <Paperclip />}
         </label>
         {/* Text input and send button */}
         <input

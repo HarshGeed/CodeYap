@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import default_pfp from "@/public/default_pfp.jpg";
 import { useSession } from "next-auth/react";
+import { Paperclip } from "lucide-react";
 
 interface GroupChatRoomProps {
   group: {
@@ -10,7 +11,6 @@ interface GroupChatRoomProps {
     name: string;
     members: { _id: string; username: string; profileImage?: string }[];
   };
-  session: any;
 }
 
 interface GroupMessage {
@@ -21,6 +21,7 @@ interface GroupMessage {
   senderImage?: string;
   message: string;
   timestamp: string;
+  fileType?: string;
 }
 
 export default function GroupChatRoom({ group }: GroupChatRoomProps) {
@@ -29,6 +30,65 @@ export default function GroupChatRoom({ group }: GroupChatRoomProps) {
   const socketRef = useRef<any>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const { data: session } = useSession();
+  const [uploading, setUploading] = useState(false);
+
+  function fileTypeFromUrl(url: string) {
+    if (url.match(/\.(jpg|jpeg|png|gif|webp)$/i)) return "image";
+    if (url.match(/\.(mp4|webm|ogg|mov)$/i)) return "video";
+    if (url.match(/\.(pdf|docx?|pptx?|xlsx?|txt)$/i)) return "document";
+    return "file";
+  }
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    // Limit to 8 files
+    if (files.length > 8) {
+      alert("You can only send a maximum of 8 files at a time.");
+      setUploading(false);
+      e.target.value = "";
+      return;
+    }
+
+    setUploading(true);
+
+    const formData = new FormData();
+    for (const file of Array.from(files)) {
+      formData.append("file", file);
+    }
+
+    try {
+      const res = await fetch("/api/imageUpload", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      if (data.urls && Array.isArray(data.urls)) {
+        for (const url of data.urls) {
+          const msgObj: GroupMessage = {
+            groupId: group._id,
+            senderId: session?.user?.id,
+            senderName: session?.user?.username,
+            senderImage: session?.user?.profileImage,
+            message: url,
+            timestamp: new Date().toISOString(),
+            fileType: fileTypeFromUrl(url),
+          };
+          socketRef.current.emit("send-group-message", msgObj);
+          await fetch("/api/group-messages/send", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(msgObj),
+          });
+        }
+      }
+    } catch (error) {
+      alert("File upload failed.");
+    }
+    setUploading(false);
+    e.target.value = "";
+  };
 
   function formatTime(dateStr: string) {
     const date = new Date(dateStr);
@@ -108,8 +168,6 @@ export default function GroupChatRoom({ group }: GroupChatRoomProps) {
       timestamp: new Date().toISOString(),
     };
 
-    console.log("this is msbObj", msgObj);
-
     socketRef.current.emit("send-group-message", msgObj);
 
     await fetch("/api/group-messages/send", {
@@ -154,11 +212,14 @@ export default function GroupChatRoom({ group }: GroupChatRoomProps) {
               const isGroupStart =
                 idx === 0 || msg.senderId !== messages[idx - 1].senderId;
 
+              // Detect file type if not present
+              const type = msg.fileType || fileTypeFromUrl(msg.message);
+
               return (
                 <div key={msg._id || idx}>
                   {showDate && (
                     <div className="flex justify-center my-2">
-                      <span className="bg-[#22304a] text-[#60a5fa] text-xs px-4 py-1 rounded-full shadow">
+                      <span className="bg-[#22304a] text-[#60a5fa] text-xs px-4 py-1 rounded-full shadow my-3">
                         {formatDate(msg.timestamp)}
                       </span>
                     </div>
@@ -201,7 +262,43 @@ export default function GroupChatRoom({ group }: GroupChatRoomProps) {
                               {msg.senderName}
                             </span>
                           )}
-                          {msg.message}
+                          {/* Render file or text */}
+                          {type === "image" ? (
+                            <Image
+                              src={msg.message}
+                              alt="uploaded"
+                              width={320}
+                              height={240}
+                              style={{
+                                objectFit: "contain",
+                                borderRadius: "0.5rem",
+                                maxWidth: "20rem",
+                                maxHeight: "15rem",
+                                width: "100%",
+                                height: "auto",
+                              }}
+                              className="rounded-lg"
+                            />
+                          ) : type === "video" ? (
+                            <video
+                              src={msg.message}
+                              controls
+                              className="max-w-xs max-h-60 rounded-lg"
+                              width={250}
+                              height={180}
+                            />
+                          ) : type === "document" ? (
+                            <a
+                              href={msg.message}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="underline text-blue-400"
+                            >
+                              📄 Document
+                            </a>
+                          ) : (
+                            msg.message
+                          )}
                           <span className="inline-block text-[11px] text-[#93c5fd] mt-1 text-right pl-2">
                             {formatTime(msg.timestamp)}
                           </span>
@@ -218,17 +315,32 @@ export default function GroupChatRoom({ group }: GroupChatRoomProps) {
       </div>
 
       {/* Input */}
-      <div className="flex mt-2 px-4 pb-4">
+      <div className="flex mt-2 px-4 pb-4 items-center gap-2">
+        {/* File upload button */}
+        <label className="cursor-pointer bg-[#22304a] text-[#60a5fa] px-3 py-2 rounded-lg shadow border border-[#22304a] hover:bg-[#2563eb]/20 transition">
+          <input
+            type="file"
+            multiple
+            hidden
+            onChange={handleFileChange}
+            accept="image/*,video/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt"
+            disabled={uploading}
+          />
+          {uploading ? "Uploading..." : <Paperclip />}
+        </label>
+        {/* Text input and send button */}
         <input
           className="flex-1 rounded-l-lg px-3 py-2 bg-[#171b24] text-[#e0e7ef] placeholder:text-[#64748b] border border-[#22304a] focus:outline-none focus:ring-1 focus:ring-[#2563eb] transition"
           value={newMessage}
           onChange={(e) => setNewMessage(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
           placeholder="Type your message..."
+          disabled={uploading}
         />
         <button
           className="bg-[#2563eb] hover:bg-[#1d4ed8] text-white px-6 py-2 rounded-r-lg shadow transition"
           onClick={handleSendMessage}
+          disabled={uploading}
         >
           Send
         </button>
