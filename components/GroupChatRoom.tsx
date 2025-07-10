@@ -31,6 +31,12 @@ export default function GroupChatRoom({ group }: GroupChatRoomProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const { data: session } = useSession();
   const [uploading, setUploading] = useState(false);
+  const [modalMedia, setModalMedia] = useState<{
+    type: string;
+    src: string;
+  } | null>(null);
+  const [modalLoading, setModalLoading] = useState(true);
+  const [uploadPercent, setUploadPercent] = useState<number | null>(null);
 
   function fileTypeFromUrl(url: string) {
     if (url.match(/\.(jpg|jpeg|png|gif|webp)$/i)) return "image";
@@ -40,55 +46,82 @@ export default function GroupChatRoom({ group }: GroupChatRoomProps) {
   }
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
+  const files = e.target.files;
+  if (!files || files.length === 0) return;
 
-    // Limit to 8 files
-    if (files.length > 8) {
-      alert("You can only send a maximum of 8 files at a time.");
-      setUploading(false);
-      e.target.value = "";
-      return;
-    }
-
-    setUploading(true);
-
-    const formData = new FormData();
-    for (const file of Array.from(files)) {
-      formData.append("file", file);
-    }
-
-    try {
-      const res = await fetch("/api/imageUpload", {
-        method: "POST",
-        body: formData,
-      });
-      const data = await res.json();
-      if (data.urls && Array.isArray(data.urls)) {
-        for (const url of data.urls) {
-          const msgObj: GroupMessage = {
-            groupId: group._id,
-            senderId: session?.user?.id,
-            senderName: session?.user?.username,
-            senderImage: session?.user?.profileImage,
-            message: url,
-            timestamp: new Date().toISOString(),
-            fileType: fileTypeFromUrl(url),
-          };
-          socketRef.current.emit("send-group-message", msgObj);
-          await fetch("/api/group-messages/send", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(msgObj),
-          });
-        }
-      }
-    } catch (error) {
-      alert("File upload failed.");
-    }
+  if (files.length > 8) {
+    alert("You can only send a maximum of 8 files at a time.");
     setUploading(false);
+    setUploadPercent(null);
     e.target.value = "";
-  };
+    return;
+  }
+
+  setUploading(true);
+  setUploadPercent(0);
+
+  const formData = new FormData();
+  for (const file of Array.from(files)) {
+    formData.append("file", file);
+  }
+
+  try {
+    // Use XMLHttpRequest for progress
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/api/imageUpload");
+
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) {
+        const percent = Math.round((event.loaded / event.total) * 100);
+        setUploadPercent(percent);
+      }
+    };
+
+    xhr.onload = async () => {
+      if (xhr.status === 200) {
+        const data = JSON.parse(xhr.responseText);
+        if (data.urls && Array.isArray(data.urls)) {
+          for (const url of data.urls) {
+            const msgObj: GroupMessage = {
+              groupId: group._id,
+              senderId: session?.user?.id,
+              senderName: session?.user?.username,
+              senderImage: session?.user?.profileImage,
+              message: url,
+              timestamp: new Date().toISOString(),
+              fileType: fileTypeFromUrl(url),
+            };
+            socketRef.current.emit("send-group-message", msgObj);
+            await fetch("/api/group-messages/send", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(msgObj),
+            });
+          }
+        }
+      } else {
+        alert("File upload failed.");
+      }
+      setUploading(false);
+      setUploadPercent(null);
+      e.target.value = "";
+    };
+
+    xhr.onerror = () => {
+      alert("File upload failed.");
+      setUploading(false);
+      setUploadPercent(null);
+      e.target.value = "";
+    };
+
+    xhr.send(formData);
+  } catch (error) {
+    alert("File upload failed.");
+    setUploading(false);
+    setUploadPercent(null);
+    e.target.value = "";
+  }
+};
 
   function formatTime(dateStr: string) {
     const date = new Date(dateStr);
@@ -264,28 +297,57 @@ export default function GroupChatRoom({ group }: GroupChatRoomProps) {
                           )}
                           {/* Render file or text */}
                           {type === "image" ? (
-                            <Image
-                              src={msg.message}
-                              alt="uploaded"
-                              width={320}
-                              height={240}
-                              style={{
-                                objectFit: "contain",
-                                borderRadius: "0.5rem",
-                                maxWidth: "20rem",
-                                maxHeight: "15rem",
-                                width: "100%",
-                                height: "auto",
+                            <div
+                              className="cursor-pointer"
+                              onClick={() => {
+                                setModalLoading(true);
+                                setModalMedia({
+                                  type: "image",
+                                  src: msg.message,
+                                });
                               }}
-                              className="rounded-lg"
-                            />
+                            >
+                              <Image
+                                src={msg.message}
+                                alt="uploaded"
+                                width={320}
+                                height={240}
+                                onLoad={() => {
+                                  setTimeout(() => {
+                                    requestAnimationFrame(() => {
+                                      bottomRef.current?.scrollIntoView({
+                                        behavior: "smooth",
+                                      });
+                                    });
+                                  }, 100);
+                                }}
+                                style={{
+                                  objectFit: "contain",
+                                  borderRadius: "0.5rem",
+                                  maxWidth: "20rem",
+                                  maxHeight: "15rem",
+                                  width: "100%",
+                                  height: "auto",
+                                }}
+                                className="rounded-lg"
+                              />
+                            </div>
                           ) : type === "video" ? (
                             <video
                               src={msg.message}
                               controls
-                              className="max-w-xs max-h-60 rounded-lg"
-                              width={250}
-                              height={180}
+                              className="max-w-md max-h-[22rem] rounded-lg"
+                              width={400}
+                              height={320}
+                              onLoad={() => {
+                                setTimeout(() => {
+                                  requestAnimationFrame(() => {
+                                    bottomRef.current?.scrollIntoView({
+                                      behavior: "smooth",
+                                    });
+                                  });
+                                }, 100);
+                              }}
                             />
                           ) : type === "document" ? (
                             <a
@@ -326,7 +388,11 @@ export default function GroupChatRoom({ group }: GroupChatRoomProps) {
             accept="image/*,video/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt"
             disabled={uploading}
           />
-          {uploading ? "Uploading..." : <Paperclip />}
+          {uploading
+    ? uploadPercent !== null
+      ? `${uploadPercent}%`
+      : "Uploading..."
+    : <Paperclip />}
         </label>
         {/* Text input and send button */}
         <input
@@ -345,6 +411,38 @@ export default function GroupChatRoom({ group }: GroupChatRoomProps) {
           Send
         </button>
       </div>
+      {modalMedia && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-80"
+          onClick={() => setModalMedia(null)}
+        >
+          <div className="relative max-w-full max-h-full flex items-center justify-center">
+            {modalLoading && (
+              <div className="absolute inset-0 flex items-center justify-center z-20">
+                <div className="w-16 h-16 border-4 border-blue-400 border-t-transparent rounded-full animate-spin"></div>
+              </div>
+            )}
+            {modalMedia.type === "image" ? (
+              <Image
+                src={modalMedia.src}
+                alt="expanded"
+                width={1200}
+                height={900}
+                className="max-w-[90vw] max-h-[90vh] rounded-lg shadow-lg object-contain"
+                style={{ width: "auto", height: "auto" }}
+                onLoadingComplete={() => setModalLoading(false)}
+              />
+            ) : (
+              <video
+                src={modalMedia.src}
+                controls
+                autoPlay
+                className="max-w-[90vw] max-h-[90vh] rounded-lg shadow-lg bg-black"
+              />
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

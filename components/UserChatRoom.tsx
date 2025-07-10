@@ -22,6 +22,7 @@ export default function UserChatRoom({ selectedUser }: UserChatRoomProps) {
     src: string;
   } | null>(null);
   const [modalLoading, setModalLoading] = useState(true);
+  const [uploadPercent, setUploadPercent] = useState<number | null>(null);
 
   // Format time as "2:15 PM"
   function formatTime(dateStr: string) {
@@ -139,57 +140,82 @@ export default function UserChatRoom({ selectedUser }: UserChatRoomProps) {
 
   // Handle file upload and send as message
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
+  const files = e.target.files;
+  if (!files || files.length === 0) return;
 
-    // Limit to 8 files
-    if (files.length > 8) {
-      alert("You can only send a maximum of 8 files at a time.");
-      setUploading(false);
-      e.target.value = "";
-      return;
-    }
-
-    setUploading(true);
-
-    const formData = new FormData();
-    for (const file of Array.from(files)) {
-      formData.append("file", file);
-    }
-
-    try {
-      const res = await fetch("/api/imageUpload", {
-        method: "POST",
-        body: formData,
-      });
-      const data = await res.json();
-      if (data.urls && Array.isArray(data.urls)) {
-        for (const url of data.urls) {
-          const roomId = getRoomId(session?.user?.id, selectedUser._id);
-          const msgObj = {
-            roomId,
-            message: url,
-            senderId: session?.user?.id,
-            senderName: session?.user?.username,
-            senderImage: session?.user?.profileImage,
-            receiverId: selectedUser._id,
-            timestamp: new Date().toISOString(),
-            fileType: fileTypeFromUrl(url),
-          };
-          socketRef.current.emit("send-message", msgObj);
-          await fetch("/api/messages/send", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(msgObj),
-          });
-        }
-      }
-    } catch (error) {
-      alert("File upload failed.");
-    }
+  if (files.length > 8) {
+    alert("You can only send a maximum of 8 files at a time.");
     setUploading(false);
+    setUploadPercent(null);
     e.target.value = "";
-  };
+    return;
+  }
+
+  setUploading(true);
+  setUploadPercent(0);
+
+  const formData = new FormData();
+  for (const file of Array.from(files)) {
+    formData.append("file", file);
+  }
+
+  try {
+    // Use XMLHttpRequest for progress
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/api/imageUpload");
+
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) {
+        const percent = Math.round((event.loaded / event.total) * 100);
+        setUploadPercent(percent);
+      }
+    };
+
+    xhr.onload = async () => {
+      if (xhr.status === 200) {
+        const data = JSON.parse(xhr.responseText);
+        if (data.urls && Array.isArray(data.urls)) {
+          for (const url of data.urls) {
+            const msgObj: GroupMessage = {
+              groupId: group._id,
+              senderId: session?.user?.id,
+              senderName: session?.user?.username,
+              senderImage: session?.user?.profileImage,
+              message: url,
+              timestamp: new Date().toISOString(),
+              fileType: fileTypeFromUrl(url),
+            };
+            socketRef.current.emit("send-group-message", msgObj);
+            await fetch("/api/group-messages/send", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(msgObj),
+            });
+          }
+        }
+      } else {
+        alert("File upload failed.");
+      }
+      setUploading(false);
+      setUploadPercent(null);
+      e.target.value = "";
+    };
+
+    xhr.onerror = () => {
+      alert("File upload failed.");
+      setUploading(false);
+      setUploadPercent(null);
+      e.target.value = "";
+    };
+
+    xhr.send(formData);
+  } catch (error) {
+    alert("File upload failed.");
+    setUploading(false);
+    setUploadPercent(null);
+    e.target.value = "";
+  }
+};
 
   return (
     <div className="flex flex-col h-full">
