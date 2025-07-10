@@ -229,6 +229,15 @@ export default function UserChatRoom({ selectedUser }: UserChatRoomProps) {
                       alt="uploaded"
                       width={320}
                       height={240}
+                      onLoad={() => {
+                        setTimeout(() => {
+                          requestAnimationFrame(() => {
+                            bottomRef.current?.scrollIntoView({
+                              behavior: "smooth",
+                            });
+                          });
+                        }, 100);
+                      }}
                       style={{
                         objectFit: "contain",
                         borderRadius: "0.5rem",
@@ -244,8 +253,17 @@ export default function UserChatRoom({ selectedUser }: UserChatRoomProps) {
                       src={msg.message}
                       controls
                       className="max-w-xs max-h-60 rounded-lg"
-                      width={250}
-                      height={180}
+                      width={320}
+                      height={240}
+                      onLoad={() => {
+                        setTimeout(() => {
+                          requestAnimationFrame(() => {
+                            bottomRef.current?.scrollIntoView({
+                              behavior: "smooth",
+                            });
+                          });
+                        }, 100);
+                      }}
                     />
                   ) : type === "document" ? (
                     <a
