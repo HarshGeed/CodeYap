@@ -17,6 +17,11 @@ export default function UserChatRoom({ selectedUser }: UserChatRoomProps) {
   const socketRef = useRef<any>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const { data: session } = useSession();
+  const [modalMedia, setModalMedia] = useState<{
+    type: string;
+    src: string;
+  } | null>(null);
+  const [modalLoading, setModalLoading] = useState(true);
 
   // Format time as "2:15 PM"
   function formatTime(dateStr: string) {
@@ -216,7 +221,7 @@ export default function UserChatRoom({ selectedUser }: UserChatRoomProps) {
                 }`}
               >
                 <span
-                  className={`max-w-[70%] break-words px-4 py-2 rounded-2xl shadow ${
+                  className={`max-w-[70%] break-words px-3 py-2 rounded-lg shadow ${
                     isOwn
                       ? "bg-[#3f495f] text-white rounded-br-sm"
                       : "bg-[#22304a] text-[#e0e7ef] rounded-bl-sm"
@@ -224,37 +229,45 @@ export default function UserChatRoom({ selectedUser }: UserChatRoomProps) {
                 >
                   {/* Render file or text */}
                   {type === "image" ? (
-                    <Image
-                      src={msg.message}
-                      alt="uploaded"
-                      width={320}
-                      height={240}
-                      onLoad={() => {
-                        setTimeout(() => {
-                          requestAnimationFrame(() => {
-                            bottomRef.current?.scrollIntoView({
-                              behavior: "smooth",
+                    <div
+                      className="cursor-pointer"
+                      onClick={() => {
+                        setModalLoading(true);
+                        setModalMedia({ type: "image", src: msg.message });
+                      }}
+                    >
+                      <Image
+                        src={msg.message}
+                        alt="uploaded"
+                        width={320}
+                        height={240}
+                        onLoad={() => {
+                          setTimeout(() => {
+                            requestAnimationFrame(() => {
+                              bottomRef.current?.scrollIntoView({
+                                behavior: "smooth",
+                              });
                             });
-                          });
-                        }, 100);
-                      }}
-                      style={{
-                        objectFit: "contain",
-                        borderRadius: "0.5rem",
-                        maxWidth: "20rem", // matches max-w-xs
-                        maxHeight: "15rem", // matches max-h-60
-                        width: "100%",
-                        height: "auto",
-                      }}
-                      className="rounded-lg"
-                    />
+                          }, 100);
+                        }}
+                        style={{
+                          objectFit: "contain",
+                          borderRadius: "0.5rem",
+                          maxWidth: "20rem", // matches max-w-xs
+                          maxHeight: "15rem", // matches max-h-60
+                          width: "100%",
+                          height: "auto",
+                        }}
+                        className="rounded-lg"
+                      />
+                    </div>
                   ) : type === "video" ? (
                     <video
                       src={msg.message}
                       controls
-                      className="max-w-xs max-h-60 rounded-lg"
-                      width={320}
-                      height={240}
+                      className="max-w-md max-h-[22rem] rounded-lg"
+                      width={400}
+                      height={320}
                       onLoad={() => {
                         setTimeout(() => {
                           requestAnimationFrame(() => {
@@ -277,7 +290,7 @@ export default function UserChatRoom({ selectedUser }: UserChatRoomProps) {
                   ) : (
                     msg.message
                   )}
-                  <span className="inline-block text-[11px] text-[#93c5fd] mt-1 text-right pl-2">
+                  <span className="inline-block text-[11px] text-[#93c5fd] mt-1 text-right pl-2 ">
                     {formatTime(msg.timestamp)}
                   </span>
                 </span>
@@ -317,6 +330,38 @@ export default function UserChatRoom({ selectedUser }: UserChatRoomProps) {
           Send
         </button>
       </div>
+      {modalMedia && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-80"
+          onClick={() => setModalMedia(null)}
+        >
+          <div className="relative max-w-full max-h-full flex items-center justify-center">
+            {modalLoading && (
+              <div className="absolute inset-0 flex items-center justify-center z-20">
+                <div className="w-16 h-16 border-4 border-blue-400 border-t-transparent rounded-full animate-spin"></div>
+              </div>
+            )}
+            {modalMedia.type === "image" ? (
+              <Image
+                src={modalMedia.src}
+                alt="expanded"
+                width={1200}
+                height={900}
+                className="max-w-[90vw] max-h-[90vh] rounded-lg shadow-lg object-contain"
+                style={{ width: "auto", height: "auto" }}
+                onLoadingComplete={() => setModalLoading(false)}
+              />
+            ) : (
+              <video
+                src={modalMedia.src}
+                controls
+                autoPlay
+                className="max-w-[90vw] max-h-[90vh] rounded-lg shadow-lg bg-black"
+              />
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
