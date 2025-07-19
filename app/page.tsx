@@ -75,6 +75,15 @@ export default function HomePage() {
     window.location.href = `/profile/${userId}`;
   };
 
+  const handleUpdateLastMessage = (userId: string, message: string) => {
+    setConnectedUsers(prev =>
+      prev.map(user =>
+        user._id === userId
+          ? { ...user, lastMessage: message }
+          : user
+      )
+    );
+  };
 
 
   // Connect socket and listen for status updates
@@ -324,7 +333,7 @@ export default function HomePage() {
             {selectedGroup ? (
               <GroupChatRoom group={selectedGroup}/>
             ) : selectedUser ? (
-              <UserChatRoom selectedUser={selectedUser}/>
+              <UserChatRoom selectedUser={selectedUser} onUpdateLastMessage={handleUpdateLastMessage}/>
             ) : (
               <div className="text-gray-400 flex items-center justify-center h-full text-lg">
                 Select a user or group to start chatting.

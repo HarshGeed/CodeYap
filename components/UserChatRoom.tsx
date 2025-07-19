@@ -27,6 +27,7 @@ interface Message {
 
 interface UserChatRoomProps {
   selectedUser: User;
+  onUpdateLastMessage: (userId: string, message: string) => void;
 }
 
 interface Socket {
@@ -35,7 +36,7 @@ interface Socket {
   off: (event: string, handler: (data: unknown) => void) => void;
 }
 
-export default function UserChatRoom({ selectedUser }: UserChatRoomProps) {
+export default function UserChatRoom({ selectedUser, onUpdateLastMessage }: UserChatRoomProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [uploading, setUploading] = useState(false);
@@ -81,7 +82,8 @@ export default function UserChatRoom({ selectedUser }: UserChatRoomProps) {
     const typingHandler = (data: unknown) => {
       const typedData = data as { roomId: string; userId: string };
       if (
-        typedData.roomId === getRoomId(session.user!.id, selectedUser._id) &&
+        session.user?.id &&
+        typedData.roomId === getRoomId(session.user.id, selectedUser._id) &&
         typedData.userId === selectedUser._id
       ) {
         setIsTyping(true);
@@ -181,6 +183,7 @@ export default function UserChatRoom({ selectedUser }: UserChatRoomProps) {
         msg.roomId === getRoomId(session?.user?.id || "", selectedUser._id)
       ) {
         setMessages((prev) => [...prev, msg]);
+        onUpdateLastMessage(selectedUser._id, msg.message);
       }
     };
 
@@ -190,7 +193,7 @@ export default function UserChatRoom({ selectedUser }: UserChatRoomProps) {
     return () => {
       socketRef.current?.off("receive-message", handler);
     };
-  }, [selectedUser, session?.user?.id]);
+  }, [selectedUser, session?.user?.id, onUpdateLastMessage]);
 
   // Handle page unload to update lastSeen
   useEffect(() => {
@@ -225,6 +228,7 @@ export default function UserChatRoom({ selectedUser }: UserChatRoomProps) {
     });
 
     setNewMessage("");
+    onUpdateLastMessage(selectedUser._id, newMessage);
   };
 
   // Handle file upload and send as message

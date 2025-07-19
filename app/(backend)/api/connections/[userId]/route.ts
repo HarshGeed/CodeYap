@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import User from "@/models/userModel";
 import { connect } from "@/lib/dbConn";
+import Message from "@/models/messageModel";
 
 export const GET = async (req: NextRequest, { params }: { params: { userId: string } }) => {
   await connect();
@@ -13,7 +14,23 @@ export const GET = async (req: NextRequest, { params }: { params: { userId: stri
     return NextResponse.json([], { status: 200 });
   }
 
-  // Optionally, fetch last message for each connection here
+  // Fetch last message for each connection
+  const connectionsWithLastMessage = await Promise.all(
+    user.connections.map(async (conn: any) => {
+      const lastMsg = await Message.findOne({
+        $or: [
+          { senderId: params.userId, receiverId: conn._id.toString() },
+          { senderId: conn._id.toString(), receiverId: params.userId },
+        ],
+      })
+        .sort({ timestamp: -1 })
+        .lean();
+      return {
+        ...conn.toObject(),
+        lastMessage: lastMsg ? lastMsg.message : null,
+      };
+    })
+  );
 
-  return NextResponse.json(user.connections, { status: 200 });
+  return NextResponse.json(connectionsWithLastMessage, { status: 200 });
 };
