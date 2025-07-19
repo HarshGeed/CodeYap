@@ -6,7 +6,7 @@ export const GET = async (req: NextRequest, { params }: { params: { userId: stri
   await connect();
   const user = await User.findById(params.userId).populate({
     path: "connections",
-    select: "_id username profileImage", // Add other fields if needed
+    select: "_id username profileImage lastSeen", // Include lastSeen from database
   });
 
   if (!user) {

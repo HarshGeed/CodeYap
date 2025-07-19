@@ -7,11 +7,25 @@ import { connectSocket } from "@/lib/socket";
 import GroupChatRoom from "@/components/GroupChatRoom";
 import UserChatRoom from "@/components/UserChatRoom";
 
+interface Socket {
+  emit: (event: string, data: unknown) => void;
+  on: (event: string, handler: (data: unknown) => void) => void;
+  off: (event: string, handler: (data: unknown) => void) => void;
+}
+
 interface ConnectedUser {
   _id: string;
   username: string;
   profileImage?: string;
   lastMessage?: string;
+  status?: "online" | "offline";
+  lastSeen?: string;
+}
+
+interface Group {
+  _id: string;
+  name: string;
+  members: { _id: string; username: string; profileImage?: string }[];
 }
 
 export default function HomePage() {
@@ -23,10 +37,12 @@ export default function HomePage() {
   const [search, setSearch] = useState("");
   const [searchResults, setSearchResults] = useState<ConnectedUser[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
-  const [groups, setGroups] = useState<any[]>([]);
-  const [selectedGroup, setSelectedGroup] = useState<any>(null);
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
+  const socketRef = useRef<Socket | null>(null);
+  const statusBuffer = useRef<{ userId: string; status: string; lastSeen?: string }[]>([]);
 
-  const handleGroupClick = (group: any) => {
+  const handleGroupClick = (group: Group) => {
     setSelectedUser(null); // Deselect individual user
     setSelectedGroup(group);
   };
@@ -59,6 +75,70 @@ export default function HomePage() {
     window.location.href = `/profile/${userId}`;
   };
 
+
+
+  // Connect socket and listen for status updates
+  useEffect(() => {
+    if (!socketRef.current) {
+      socketRef.current = connectSocket() as Socket;
+    }
+    
+    // Register user for status tracking
+    if (socketRef.current && session?.user?.id) {
+      socketRef.current.emit("register-user", session.user.id);
+    }
+
+    // Listen for user status updates
+    const statusHandler = (data: unknown) => {
+      const { userId, status, lastSeen } = data as { userId: string; status: string; lastSeen?: string };
+      if (connectedUsers.length === 0) {
+        statusBuffer.current.push({ userId, status, lastSeen });
+        return;
+      }
+      setConnectedUsers(prev => 
+        prev.map(user => 
+          user._id === userId
+            ? { ...user, status: status as "online" | "offline", lastSeen: lastSeen || user.lastSeen }
+            : user
+        )
+      );
+    };
+
+    socketRef.current?.on("user-status", statusHandler);
+
+    return () => {
+      socketRef.current?.off("user-status", statusHandler);
+    };
+  }, [session?.user?.id, connectedUsers.length]);
+
+  // After users are loaded, apply buffered status events
+  useEffect(() => {
+    if (connectedUsers.length > 0 && statusBuffer.current.length > 0) {
+      setConnectedUsers(prev =>
+        prev.map(user => {
+          const match = statusBuffer.current.find(e => e.userId === user._id);
+          return match
+            ? { ...user, status: match.status as "online" | "offline", lastSeen: match.lastSeen || user.lastSeen }
+            : user;
+        })
+      );
+      statusBuffer.current = [];
+    }
+  }, [connectedUsers.length]);
+
+  // Handle page unload to update lastSeen
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (session?.user?.id) {
+        // Use sendBeacon for reliable delivery during page unload
+        navigator.sendBeacon(`/api/updateLastSeen/${session.user.id}`);
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [session?.user?.id]);
+
   // Fetch groups
   useEffect(() => {
     if (!session?.user?.id) return;
@@ -87,7 +167,12 @@ export default function HomePage() {
       try {
         const res = await fetch(`/api/connections/${userId}`);
         const data = await res.json();
-        setConnectedUsers(data);
+        // Initialize all users as offline initially (they'll be updated by socket events)
+        const usersWithStatus = data.map((user: ConnectedUser) => ({
+          ...user,
+          status: "offline" as const
+        }));
+        setConnectedUsers(usersWithStatus);
       } catch {
         setConnectedUsers([]);
       } finally {
@@ -195,8 +280,12 @@ export default function HomePage() {
                         fill
                         style={{ objectFit: "cover", borderRadius: "9999px" }}
                       />
+                      {/* Online status indicator */}
+                      {user.status === "online" && (
+                        <div className="absolute bottom-0 right-0 w-4 h-4 bg-green-500 rounded-full border-2 border-[#22304a]"></div>
+                      )}
                     </div>
-                    <div>
+                    <div className="flex-1">
                       <div className="font-medium text-base text-[#e0e7ef]">
                         {user.username}
                       </div>

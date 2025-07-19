@@ -16,6 +16,7 @@ export interface IUser extends Document {
   location?: string;
   techStacks?: string[];
   connections?: string[];
+  lastSeen?: Date;
 }
 
 const userSchema = new Schema<IUser>(
@@ -87,6 +88,10 @@ const userSchema = new Schema<IUser>(
       default: [],
     },
     connections: [{type: mongoose.Schema.Types.ObjectId, ref: "User"}],
+    lastSeen: {
+      type: Date,
+      default: Date.now,
+    },
   },
   { timestamps: true }
 );

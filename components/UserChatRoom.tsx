@@ -1,28 +1,100 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
-import default_pfp from "@/public/default_pfp.jpg";
+import { Paperclip, Download } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { connectSocket } from "@/lib/socket";
-import { Paperclip } from "lucide-react";
+
+interface User {
+  _id: string;
+  username: string;
+  profileImage?: string;
+  status?: "online" | "offline";
+  lastSeen?: string;
+}
+
+interface Message {
+  _id?: string;
+  roomId: string;
+  message: string;
+  senderId: string;
+  receiverId: string;
+  timestamp: string;
+  fileType?: string;
+  originalName?: string;
+  sender?: string;
+}
 
 interface UserChatRoomProps {
-  selectedUser: any;
+  selectedUser: User;
+}
+
+interface Socket {
+  emit: (event: string, data: unknown) => void;
+  on: (event: string, handler: (data: unknown) => void) => void;
+  off: (event: string, handler: (data: unknown) => void) => void;
 }
 
 export default function UserChatRoom({ selectedUser }: UserChatRoomProps) {
-  const [messages, setMessages] = useState<any[]>([]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [uploading, setUploading] = useState(false);
-  const socketRef = useRef<any>(null);
+  const [uploadPercent, setUploadPercent] = useState<number | null>(null);
+  const socketRef = useRef<Socket | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const { data: session } = useSession();
-  const [modalMedia, setModalMedia] = useState<{
-    type: string;
-    src: string;
-  } | null>(null);
+  const [modalMedia, setModalMedia] = useState<{ type: string; src: string } | null>(null);
   const [modalLoading, setModalLoading] = useState(true);
-  const [uploadPercent, setUploadPercent] = useState<number | null>(null);
+  const [isTyping, setIsTyping] = useState(false);
+
+  // Local state for user status and lastSeen
+  const [userStatus, setUserStatus] = useState<{ status: string; lastSeen?: string }>({
+    status: selectedUser.status || "offline",
+    lastSeen: selectedUser.lastSeen,
+  });
+
+  // Update local status state when selectedUser changes
+  useEffect(() => {
+    setUserStatus({
+      status: selectedUser.status || "offline",
+      lastSeen: selectedUser.lastSeen,
+    });
+  }, [selectedUser]);
+
+  // Listen for user status updates
+  useEffect(() => {
+    if (!socketRef.current) return;
+    const handler = (data: unknown) => {
+      const { userId, status, lastSeen } = data as { userId: string; status: string; lastSeen?: string };
+      if (userId === selectedUser._id) {
+        setUserStatus({ status, lastSeen });
+      }
+    };
+    socketRef.current.on("user-status", handler);
+    return () => socketRef.current?.off("user-status", handler);
+  }, [selectedUser]);
+
+  // Listen for typing events
+  useEffect(() => {
+    if (!socketRef.current || !selectedUser || !session?.user?.id) return;
+
+    const typingHandler = (data: unknown) => {
+      const typedData = data as { roomId: string; userId: string };
+      if (
+        typedData.roomId === getRoomId(session.user!.id, selectedUser._id) &&
+        typedData.userId === selectedUser._id
+      ) {
+        setIsTyping(true);
+        setTimeout(() => setIsTyping(false), 2000);
+      }
+    };
+
+    socketRef.current.on("typing", typingHandler);
+
+    return () => {
+      socketRef.current?.off("typing", typingHandler);
+    };
+  }, [selectedUser, session?.user?.id]);
 
   // Format time as "2:15 PM"
   function formatTime(dateStr: string) {
@@ -76,7 +148,11 @@ export default function UserChatRoom({ selectedUser }: UserChatRoomProps) {
     if (!socketRef.current) {
       socketRef.current = connectSocket();
     }
-  }, []);
+    // Register user for status tracking
+    if (socketRef.current && session?.user?.id) {
+      socketRef.current.emit("register-user", session.user.id);
+    }
+  }, [session?.user?.id]);
 
   // Join room and fetch messages when user is selected
   useEffect(() => {
@@ -84,7 +160,7 @@ export default function UserChatRoom({ selectedUser }: UserChatRoomProps) {
     const roomId = getRoomId(session.user.id, selectedUser._id);
 
     // Join room
-    socketRef.current.emit("join-room", roomId);
+    socketRef.current?.emit("join-room", roomId);
 
     // Fetch chat history
     (async () => {
@@ -98,11 +174,11 @@ export default function UserChatRoom({ selectedUser }: UserChatRoomProps) {
   useEffect(() => {
     if (!socketRef.current) return;
 
-    const handler = (msg: any) => {
-      // Only add message if it's for the currently selected room
+    const handler = (data: unknown) => {
+      const msg = data as Message;
       if (
         selectedUser &&
-        msg.roomId === getRoomId(session?.user?.id, selectedUser._id)
+        msg.roomId === getRoomId(session?.user?.id || "", selectedUser._id)
       ) {
         setMessages((prev) => [...prev, msg]);
       }
@@ -112,22 +188,35 @@ export default function UserChatRoom({ selectedUser }: UserChatRoomProps) {
 
     // Cleanup
     return () => {
-      socketRef.current.off("receive-message", handler);
+      socketRef.current?.off("receive-message", handler);
     };
   }, [selectedUser, session?.user?.id]);
 
+  // Handle page unload to update lastSeen
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (session?.user?.id) {
+        // Use sendBeacon for reliable delivery during page unload
+        navigator.sendBeacon(`/api/updateLastSeen/${session.user.id}`);
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [session?.user?.id]);
+
   const handleSendMessage = async () => {
-    if (!newMessage.trim() || !selectedUser) return;
-    const roomId = getRoomId(session?.user?.id, selectedUser._id);
-    const msgObj = {
+    if (!newMessage.trim() || !selectedUser || !session?.user?.id) return;
+    const roomId = getRoomId(session.user.id, selectedUser._id);
+    const msgObj: Message = {
       roomId,
       message: newMessage,
-      senderId: session?.user?.id,
+      senderId: session.user.id,
       receiverId: selectedUser._id,
       timestamp: new Date().toISOString(),
     };
 
-    socketRef.current.emit("send-message", msgObj);
+    socketRef.current?.emit("send-message", msgObj);
 
     await fetch("/api/messages/send", {
       method: "POST",
@@ -140,88 +229,111 @@ export default function UserChatRoom({ selectedUser }: UserChatRoomProps) {
 
   // Handle file upload and send as message
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-  const files = e.target.files;
-  if (!files || files.length === 0) return;
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
 
-  if (files.length > 8) {
-    alert("You can only send a maximum of 8 files at a time.");
-    setUploading(false);
-    setUploadPercent(null);
-    e.target.value = "";
-    return;
-  }
-
-  setUploading(true);
-  setUploadPercent(0);
-
-  const formData = new FormData();
-  for (const file of Array.from(files)) {
-    formData.append("file", file);
-  }
-
-  try {
-    // Use XMLHttpRequest for progress
-    const xhr = new XMLHttpRequest();
-    xhr.open("POST", "/api/imageUpload");
-
-    xhr.upload.onprogress = (event) => {
-      if (event.lengthComputable) {
-        const percent = Math.round((event.loaded / event.total) * 100);
-        setUploadPercent(percent);
-      }
-    };
-
-    xhr.onload = async () => {
-      if (xhr.status === 200) {
-        const data = JSON.parse(xhr.responseText);
-        if (data.urls && Array.isArray(data.urls)) {
-          for (const url of data.urls) {
-            const msgObj: GroupMessage = {
-              groupId: group._id,
-              senderId: session?.user?.id,
-              senderName: session?.user?.username,
-              senderImage: session?.user?.profileImage,
-              message: url,
-              timestamp: new Date().toISOString(),
-              fileType: fileTypeFromUrl(url),
-            };
-            socketRef.current.emit("send-group-message", msgObj);
-            await fetch("/api/group-messages/send", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(msgObj),
-            });
-          }
-        }
-      } else {
-        alert("File upload failed.");
-      }
+    if (files.length > 8) {
+      alert("You can only send a maximum of 8 files at a time.");
       setUploading(false);
       setUploadPercent(null);
       e.target.value = "";
-    };
+      return;
+    }
 
-    xhr.onerror = () => {
+    setUploading(true);
+    setUploadPercent(0);
+
+    const formData = new FormData();
+    for (const file of Array.from(files)) {
+      formData.append("file", file, file.name);
+    }
+
+    try {
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", "/api/imageUpload");
+
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) {
+          const percent = Math.round((event.loaded / event.total) * 100);
+          setUploadPercent(percent);
+        }
+      };
+
+      xhr.onload = async () => {
+        if (xhr.status === 200) {
+          const data = JSON.parse(xhr.responseText);
+          if (data.urls && Array.isArray(data.urls)) {
+            for (const fileObj of data.urls) {
+              const roomId = getRoomId(session?.user?.id || "", selectedUser._id);
+              const msgObj: Message = {
+                roomId,
+                message: fileObj.url,
+                senderId: session?.user?.id || "",
+                receiverId: selectedUser._id,
+                timestamp: new Date().toISOString(),
+                fileType: fileTypeFromUrl(fileObj.url),
+                originalName: fileObj.originalName,
+              };
+              setMessages((prev) => [...prev, msgObj]);
+              socketRef.current?.emit("send-message", msgObj);
+              await fetch("/api/messages/send", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(msgObj),
+              });
+            }
+          }
+        } else {
+          alert("File upload failed.");
+        }
+        setUploading(false);
+        setUploadPercent(null);
+        e.target.value = "";
+      };
+
+      xhr.onerror = () => {
+        alert("File upload failed.");
+        setUploading(false);
+        setUploadPercent(null);
+        e.target.value = "";
+      };
+
+      xhr.send(formData);
+    } catch {
       alert("File upload failed.");
       setUploading(false);
       setUploadPercent(null);
       e.target.value = "";
-    };
-
-    xhr.send(formData);
-  } catch (error) {
-    alert("File upload failed.");
-    setUploading(false);
-    setUploadPercent(null);
-    e.target.value = "";
-  }
-};
+    }
+  };
 
   return (
     <div className="flex flex-col h-full">
-      <div className="font-bold text-2xl mb-2 pt-4 px-4 text-[#c0cad6] tracking-wide">
-        Chat with {selectedUser.username}
+      {/* Header with profile image, username, and status */}
+      <div className="flex items-center gap-3 px-4 pt-4 pb-2">
+        <Image
+          src={selectedUser.profileImage || "/default_pfp.jpg"}
+          alt={selectedUser.username}
+          width={46}
+          height={46}
+          className="rounded-full aspect-square object-cover border border-[#2563eb]"
+        />
+        <div className="flex flex-col">
+          <span className="font-bold text-xl text-[#c0cad6] tracking-wide">
+            {selectedUser.username}
+          </span>
+          <span className="text-xs text-[#60a5fa]">
+            {isTyping
+              ? "typing..."
+              : userStatus.status === "online"
+              ? "Online"
+              : userStatus.lastSeen
+              ? `Last seen ${formatDate(userStatus.lastSeen)} ${formatTime(userStatus.lastSeen)}`
+              : "Offline"}
+          </span>
+        </div>
       </div>
+      {/* Chat messages */}
       <div className="flex-1 overflow-y-auto p-4 rounded">
         {messages.map((msg, idx) => {
           const msgDate = new Date(msg.timestamp).toDateString();
@@ -229,7 +341,6 @@ export default function UserChatRoom({ selectedUser }: UserChatRoomProps) {
             idx === 0 ||
             msgDate !== new Date(messages[idx - 1].timestamp).toDateString();
           const isOwn = (msg.sender || msg.senderId) === session?.user?.id;
-
           const type = msg.fileType || fileTypeFromUrl(msg.message);
 
           return (
@@ -279,8 +390,8 @@ export default function UserChatRoom({ selectedUser }: UserChatRoomProps) {
                         style={{
                           objectFit: "contain",
                           borderRadius: "0.5rem",
-                          maxWidth: "20rem", // matches max-w-xs
-                          maxHeight: "15rem", // matches max-h-60
+                          maxWidth: "20rem",
+                          maxHeight: "15rem",
                           width: "100%",
                           height: "auto",
                         }}
@@ -305,14 +416,34 @@ export default function UserChatRoom({ selectedUser }: UserChatRoomProps) {
                       }}
                     />
                   ) : type === "document" ? (
-                    <a
-                      href={msg.message}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="underline text-blue-400"
-                    >
-                      📄 Document
-                    </a>
+                    <div className="flex items-center gap-3 bg-[#22304a] rounded-lg px-3 py-2">
+                      <span className="text-2xl">📄</span>
+                      <div className="flex flex-col">
+                        <span className="text-sm font-semibold text-[#60a5fa]">
+                          {msg.originalName ||
+                            (() => {
+                              try {
+                                const urlObj = new URL(msg.message);
+                                return decodeURIComponent(
+                                  urlObj.pathname.split("/").pop() || "Document"
+                                );
+                              } catch {
+                                return "Document";
+                              }
+                            })()}
+                        </span>
+                      </div>
+                      <a
+                        href={msg.message}
+                        download={msg.originalName || undefined}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="ml-auto text-[#60a5fa] hover:text-blue-400 p-2 rounded transition"
+                        title="Download"
+                      >
+                        <Download size={22} />
+                      </a>
+                    </div>
                   ) : (
                     msg.message
                   )}
@@ -326,6 +457,7 @@ export default function UserChatRoom({ selectedUser }: UserChatRoomProps) {
         })}
         <div ref={bottomRef} />
       </div>
+      {/* Input and upload */}
       <div className="flex mt-2 px-4 pb-4 items-center gap-2">
         {/* File upload button */}
         <label className="cursor-pointer bg-[#22304a] text-[#60a5fa] px-3 py-2 rounded-lg shadow border border-[#22304a] hover:bg-[#2563eb]/20 transition">
@@ -337,13 +469,25 @@ export default function UserChatRoom({ selectedUser }: UserChatRoomProps) {
             accept="image/*,video/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt"
             disabled={uploading}
           />
-          {uploading ? "Uploading..." : <Paperclip />}
+          {uploading
+            ? uploadPercent !== null
+              ? `${uploadPercent}%`
+              : "Uploading..."
+            : <Paperclip />}
         </label>
         {/* Text input and send button */}
         <input
           className="flex-1 rounded-l-lg px-3 py-2 bg-[#171b24] text-[#e0e7ef] placeholder:text-[#64748b] border border-[#22304a] focus:outline-none focus:ring-1 focus:ring-[#2563eb] transition"
           value={newMessage}
-          onChange={(e) => setNewMessage(e.target.value)}
+          onChange={(e) => {
+            setNewMessage(e.target.value);
+            if (socketRef.current && selectedUser && session?.user?.id) {
+              socketRef.current.emit("typing", {
+                roomId: getRoomId(session.user.id, selectedUser._id),
+                userId: session.user.id,
+              });
+            }
+          }}
           onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
           placeholder="Type your message..."
           disabled={uploading}
@@ -356,6 +500,7 @@ export default function UserChatRoom({ selectedUser }: UserChatRoomProps) {
           Send
         </button>
       </div>
+      {/* Modal for media preview */}
       {modalMedia && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-80"
