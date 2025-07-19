@@ -47,8 +47,17 @@ export default function HomePage() {
     setSelectedGroup(group);
   };
 
-  const handleUserClick = (user: ConnectedUser) => {
-    setSelectedUser(user);
+  const handleUserClick = async (user: ConnectedUser) => {
+    // Fetch latest profile for selected user
+    try {
+      const res = await fetch(`/api/fetchProfle/${user._id}`);
+      if (!res.ok) throw new Error("Failed to fetch user profile");
+      const freshUser = await res.json();
+      setSelectedUser(freshUser);
+    } catch {
+      // fallback to old user if fetch fails
+      setSelectedUser(user);
+    }
     setSelectedGroup(null);
   };
 

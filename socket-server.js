@@ -86,25 +86,30 @@ io.on("connection", (socket) => {
   });
 
   socket.on("disconnect", () => {
-    // Find and remove user from onlineUsers
     for (const [userId, id] of onlineUsers.entries()) {
       if (id === socket.id) {
         onlineUsers.delete(userId);
-        
-        // Update user status in memory
+  
         const lastSeen = new Date().toISOString();
         userStatuses.set(userId, {
           status: "offline",
           lastSeen: lastSeen
         });
-        
+  
         // Emit status update to all clients
         io.emit("user-status", {
           userId,
           status: "offline",
           lastSeen: lastSeen,
         });
-        
+  
+        // --- ADD THIS: Update lastSeen in the database ---
+        fetch(`http://localhost:3000/api/updateLastSeen/${userId}`, {
+          method: "PATCH"
+        }).catch((err) => {
+          console.error("Failed to update lastSeen in DB:", err);
+        });
+  
         console.log(`User ${userId} disconnected and marked as offline`);
         break;
       }
