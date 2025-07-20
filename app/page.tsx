@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { useSession } from "next-auth/react";
 import default_pfp from "@/public/default_pfp.jpg";
-import { connectSocket } from "@/lib/socket";
+import { connectSocket, registerUser } from "@/lib/socket";
 import GroupChatRoom from "@/components/GroupChatRoom";
 import UserChatRoom from "@/components/UserChatRoom";
 
@@ -41,6 +41,7 @@ export default function HomePage() {
   const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
   const socketRef = useRef<Socket | null>(null);
   const statusBuffer = useRef<{ userId: string; status: string; lastSeen?: string }[]>([]);
+  const [socketConnected, setSocketConnected] = useState(false);
 
   const handleGroupClick = (group: Group) => {
     setSelectedUser(null); // Deselect individual user
@@ -101,18 +102,35 @@ export default function HomePage() {
       socketRef.current = connectSocket() as Socket;
     }
     
+    // Listen for socket connection status
+    const connectHandler = () => {
+      console.log("Socket connected");
+      setSocketConnected(true);
+    };
+    
+    const disconnectHandler = () => {
+      console.log("Socket disconnected");
+      setSocketConnected(false);
+    };
+    
+    socketRef.current?.on("connect", connectHandler);
+    socketRef.current?.on("disconnect", disconnectHandler);
+    
     // Register user for status tracking
-    if (socketRef.current && session?.user?.id) {
-      socketRef.current.emit("register-user", session.user.id);
+    if (session?.user?.id) {
+      registerUser(session.user.id);
     }
 
     // Listen for user status updates
     const statusHandler = (data: unknown) => {
       const { userId, status, lastSeen } = data as { userId: string; status: string; lastSeen?: string };
+      console.log("Received status update:", { userId, status, lastSeen });
+      
       if (connectedUsers.length === 0) {
         statusBuffer.current.push({ userId, status, lastSeen });
         return;
       }
+      
       setConnectedUsers(prev => 
         prev.map(user => 
           user._id === userId
@@ -125,6 +143,8 @@ export default function HomePage() {
     socketRef.current?.on("user-status", statusHandler);
 
     return () => {
+      socketRef.current?.off("connect", connectHandler);
+      socketRef.current?.off("disconnect", disconnectHandler);
       socketRef.current?.off("user-status", statusHandler);
     };
   }, [session?.user?.id, connectedUsers.length]);
@@ -132,9 +152,13 @@ export default function HomePage() {
   // After users are loaded, apply buffered status events
   useEffect(() => {
     if (connectedUsers.length > 0 && statusBuffer.current.length > 0) {
+      console.log("Applying buffered status events:", statusBuffer.current);
       setConnectedUsers(prev =>
         prev.map(user => {
           const match = statusBuffer.current.find(e => e.userId === user._id);
+          if (match) {
+            console.log(`Updating user ${user._id} status to ${match.status}`);
+          }
           return match
             ? { ...user, status: match.status as "online" | "offline", lastSeen: match.lastSeen || user.lastSeen }
             : user;
@@ -191,6 +215,7 @@ export default function HomePage() {
           status: "offline" as const
         }));
         setConnectedUsers(usersWithStatus);
+        console.log("Loaded connected users:", usersWithStatus);
       } catch {
         setConnectedUsers([]);
       } finally {
@@ -270,12 +295,15 @@ export default function HomePage() {
             <h1 className="font-semibold text-3xl text-[#7e90a7] tracking-wide">
               Chats
             </h1>
-            <button
-              className="ml-auto cursor-pointer bg-[#2a395d] hover:opacity-80 text-[#fafafa] px-4 py-1 rounded-lg shadow transition border border-[#232323]/80"
-              onClick={() => setShowDialog(true)}
-            >
-              New Chat
-            </button>
+            <div className="ml-auto flex items-center gap-2">
+              <div className={`w-2 h-2 rounded-full ${socketConnected ? 'bg-green-500' : 'bg-red-500'}`} title={socketConnected ? 'Connected' : 'Disconnected'}></div>
+              <button
+                className="cursor-pointer bg-[#2a395d] hover:opacity-80 text-[#fafafa] px-4 py-1 rounded-lg shadow transition border border-[#232323]/80"
+                onClick={() => setShowDialog(true)}
+              >
+                New Chat
+              </button>
+            </div>
           </div>
           {/* Users which are connected */}
           <div className="mt-2">

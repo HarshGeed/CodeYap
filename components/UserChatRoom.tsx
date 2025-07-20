@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { Paperclip, Download } from "lucide-react";
 import { useSession } from "next-auth/react";
-import { connectSocket } from "@/lib/socket";
+import { connectSocket, registerUser } from "@/lib/socket";
 
 interface User {
   _id: string;
@@ -47,6 +47,7 @@ export default function UserChatRoom({ selectedUser, onUpdateLastMessage }: User
   const [modalMedia, setModalMedia] = useState<{ type: string; src: string } | null>(null);
   const [modalLoading, setModalLoading] = useState(true);
   const [isTyping, setIsTyping] = useState(false);
+  const [seenMessageId, setSeenMessageId] = useState<string | null>(null);
 
   // Local state for user status and lastSeen
   const [userStatus, setUserStatus] = useState<{ status: string; lastSeen?: string }>({
@@ -67,7 +68,9 @@ export default function UserChatRoom({ selectedUser, onUpdateLastMessage }: User
     if (!socketRef.current) return;
     const handler = (data: unknown) => {
       const { userId, status, lastSeen } = data as { userId: string; status: string; lastSeen?: string };
+      console.log("UserChatRoom received status update:", { userId, status, lastSeen, selectedUserId: selectedUser._id });
       if (userId === selectedUser._id) {
+        console.log("Updating user status in UserChatRoom:", { status, lastSeen });
         setUserStatus({ status, lastSeen });
       }
     };
@@ -151,8 +154,8 @@ export default function UserChatRoom({ selectedUser, onUpdateLastMessage }: User
       socketRef.current = connectSocket();
     }
     // Register user for status tracking
-    if (socketRef.current && session?.user?.id) {
-      socketRef.current.emit("register-user", session.user.id);
+    if (session?.user?.id) {
+      registerUser(session.user.id);
     }
   }, [session?.user?.id]);
 
@@ -195,6 +198,55 @@ export default function UserChatRoom({ selectedUser, onUpdateLastMessage }: User
     };
   }, [selectedUser, session?.user?.id, onUpdateLastMessage]);
 
+  // Emit 'message-seen' for every new message from the selected user to the current user
+  useEffect(() => {
+    if (
+      messages.length > 0 &&
+      session?.user?.id &&
+      selectedUser &&
+      socketRef.current
+    ) {
+      // Find the last message from the selected user to the current user
+      const lastMsg = [...messages].reverse().find(
+        (msg) =>
+          msg.receiverId === session?.user?.id &&
+          msg.senderId === selectedUser._id &&
+          msg._id
+      );
+      if (lastMsg && session?.user?.id) {
+        console.log("Emitting message-seen", {
+          roomId: lastMsg.roomId,
+          messageId: lastMsg._id,
+          seenBy: session.user.id,
+        });
+        socketRef.current.emit("message-seen", {
+          roomId: lastMsg.roomId,
+          messageId: lastMsg._id,
+          seenBy: session.user.id,
+        });
+      }
+    }
+  }, [messages, selectedUser, session?.user?.id]);
+
+  // Listen for 'message-seen' events
+  useEffect(() => {
+    if (!socketRef.current) return;
+    type MessageSeenData = { messageId: string; seenBy: string };
+    const handler = (data: unknown) => {
+      const seenData = data as MessageSeenData;
+      console.log("Received message-seen", seenData);
+      // Only update if the current user is the sender
+      if (
+        seenData.seenBy === selectedUser._id &&
+        session?.user?.id === messages.find(m => m._id === seenData.messageId)?.senderId
+      ) {
+        setSeenMessageId(seenData.messageId);
+      }
+    };
+    socketRef.current.on("message-seen", handler);
+    return () => socketRef.current?.off("message-seen", handler);
+  }, [selectedUser, session?.user?.id, messages]);
+
   // Handle page unload to update lastSeen
   useEffect(() => {
     const handleBeforeUnload = () => {
@@ -211,7 +263,7 @@ export default function UserChatRoom({ selectedUser, onUpdateLastMessage }: User
   const handleSendMessage = async () => {
     if (!newMessage.trim() || !selectedUser || !session?.user?.id) return;
     const roomId = getRoomId(session.user.id, selectedUser._id);
-    const msgObj: Message = {
+    const msgObj = {
       roomId,
       message: newMessage,
       senderId: session.user.id,
@@ -219,13 +271,16 @@ export default function UserChatRoom({ selectedUser, onUpdateLastMessage }: User
       timestamp: new Date().toISOString(),
     };
 
-    socketRef.current?.emit("send-message", msgObj);
-
-    await fetch("/api/messages/send", {
+    // Save to backend and get the message with _id
+    const res = await fetch("/api/messages/send", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(msgObj),
     });
+    const savedMsg = await res.json();
+
+    // Emit via socket (do NOT add to state here)
+    socketRef.current?.emit("send-message", savedMsg);
 
     setNewMessage("");
     onUpdateLastMessage(selectedUser._id, newMessage);
@@ -453,6 +508,9 @@ export default function UserChatRoom({ selectedUser, onUpdateLastMessage }: User
                   )}
                   <span className="inline-block text-[11px] text-[#93c5fd] mt-1 text-right pl-2 ">
                     {formatTime(msg.timestamp)}
+                    {isOwn && msg._id === seenMessageId && (
+                      <span className="text-xs text-blue-400 ml-2">seen</span>
+                    )}
                   </span>
                 </span>
               </div>
