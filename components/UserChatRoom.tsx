@@ -47,7 +47,7 @@ export default function UserChatRoom({ selectedUser, onUpdateLastMessage }: User
   const [modalMedia, setModalMedia] = useState<{ type: string; src: string } | null>(null);
   const [modalLoading, setModalLoading] = useState(true);
   const [isTyping, setIsTyping] = useState(false);
-  const [seenMessageId, setSeenMessageId] = useState<string | null>(null);
+  const [seenMessageIds, setSeenMessageIds] = useState<Set<string>>(new Set());
 
   // Local state for user status and lastSeen
   const [userStatus, setUserStatus] = useState<{ status: string; lastSeen?: string }>({
@@ -141,23 +141,75 @@ export default function UserChatRoom({ selectedUser, onUpdateLastMessage }: User
     return "file";
   }
 
-  // Scroll to bottom when messages change
+  // Scroll to bottom when messages change and emit seen status
   useEffect(() => {
     if (bottomRef.current) {
       bottomRef.current.scrollIntoView({ behavior: "smooth" });
     }
-  }, [messages]);
+    
+    // Emit seen status for messages when they become visible
+    if (messages.length > 0 && session?.user?.id && selectedUser && socketRef.current) {
+      const unreadMessages = messages.filter(
+        (msg) =>
+          msg.receiverId === session?.user?.id &&
+          msg.senderId === selectedUser._id &&
+          msg._id &&
+          !seenMessageIds.has(msg._id)
+      );
+      
+      if (unreadMessages.length > 0) {
+        console.log("Emitting seen on message visibility for", unreadMessages.length, "messages");
+        unreadMessages.forEach((msg) => {
+          socketRef.current?.emit("message-seen", {
+            roomId: msg.roomId,
+            messageId: msg._id,
+            seenBy: session?.user?.id,
+          });
+          setSeenMessageIds(prev => new Set([...prev, msg._id!]));
+        });
+      }
+    }
+  }, [messages, session?.user?.id, selectedUser, seenMessageIds]);
 
   // Connect socket once
   useEffect(() => {
     if (!socketRef.current) {
       socketRef.current = connectSocket();
     }
+    
     // Register user for status tracking
     if (session?.user?.id) {
       registerUser(session.user.id);
     }
-  }, [session?.user?.id]);
+    
+    // Handle reconnection
+    const handleReconnect = () => {
+      console.log("Socket reconnected, re-emitting seen status");
+      if (selectedUser && session?.user?.id && messages.length > 0) {
+        const unreadMessages = messages.filter(
+          (msg) =>
+            msg.receiverId === session?.user?.id &&
+            msg.senderId === selectedUser._id &&
+            msg._id
+        );
+        
+        unreadMessages.forEach((msg) => {
+          console.log("Re-emitting seen on reconnect for message:", msg._id);
+          socketRef.current?.emit("message-seen", {
+            roomId: msg.roomId,
+            messageId: msg._id,
+            seenBy: session?.user?.id,
+          });
+        });
+      }
+    };
+    
+    socketRef.current?.on("connect", handleReconnect);
+    
+    return () => {
+      socketRef.current?.off("connect", handleReconnect);
+    };
+  }, [session?.user?.id, selectedUser, messages]);
 
   // Join room and fetch messages when user is selected
   useEffect(() => {
@@ -172,6 +224,26 @@ export default function UserChatRoom({ selectedUser, onUpdateLastMessage }: User
       const res = await fetch(`/api/messages/${roomId}`);
       const data = await res.json();
       setMessages(data);
+      
+      // After loading messages, emit seen for all messages from the selected user
+      setTimeout(() => {
+        const unreadMessages = data.filter(
+          (msg: Message) =>
+            msg.receiverId === session?.user?.id &&
+            msg.senderId === selectedUser._id &&
+            msg._id
+        );
+        
+        unreadMessages.forEach((msg: Message) => {
+          console.log("Emitting seen on room join for message:", msg._id);
+          socketRef.current?.emit("message-seen", {
+            roomId: msg.roomId,
+            messageId: msg._id,
+            seenBy: session?.user?.id,
+          });
+          setSeenMessageIds(prev => new Set([...prev, msg._id!]));
+        });
+      }, 100); // Small delay to ensure messages are loaded
     })();
   }, [selectedUser, session?.user?.id]);
 
@@ -187,6 +259,19 @@ export default function UserChatRoom({ selectedUser, onUpdateLastMessage }: User
       ) {
         setMessages((prev) => [...prev, msg]);
         onUpdateLastMessage(selectedUser._id, msg.message);
+        
+        // If this is a message to the current user, emit seen immediately
+        if (msg.receiverId === session?.user?.id && msg.senderId === selectedUser._id && msg._id) {
+          console.log("New message received, emitting seen immediately:", msg._id);
+          setTimeout(() => {
+            socketRef.current?.emit("message-seen", {
+              roomId: msg.roomId,
+              messageId: msg._id,
+              seenBy: session?.user?.id,
+            });
+            setSeenMessageIds(prev => new Set([...prev, msg._id!]));
+          }, 100); // Small delay to ensure message is processed
+        }
       }
     };
 
@@ -198,7 +283,7 @@ export default function UserChatRoom({ selectedUser, onUpdateLastMessage }: User
     };
   }, [selectedUser, session?.user?.id, onUpdateLastMessage]);
 
-  // Emit 'message-seen' for every new message from the selected user to the current user
+    // Emit 'message-seen' for all unread messages from the selected user to the current user
   useEffect(() => {
     if (
       messages.length > 0 &&
@@ -206,27 +291,66 @@ export default function UserChatRoom({ selectedUser, onUpdateLastMessage }: User
       selectedUser &&
       socketRef.current
     ) {
-      // Find the last message from the selected user to the current user
-      const lastMsg = [...messages].reverse().find(
+      // Find all unread messages from the selected user to the current user
+      const unreadMessages = messages.filter(
         (msg) =>
           msg.receiverId === session?.user?.id &&
           msg.senderId === selectedUser._id &&
-          msg._id
+          msg._id &&
+          !seenMessageIds.has(msg._id)
       );
-      if (lastMsg && session?.user?.id) {
+      
+      // Emit seen for each unread message
+      unreadMessages.forEach(msg => {
         console.log("Emitting message-seen", {
-          roomId: lastMsg.roomId,
-          messageId: lastMsg._id,
-          seenBy: session.user.id,
+          roomId: msg.roomId,
+          messageId: msg._id,
+          seenBy: session?.user?.id,
         });
-        socketRef.current.emit("message-seen", {
-          roomId: lastMsg.roomId,
-          messageId: lastMsg._id,
-          seenBy: session.user.id,
+        socketRef.current?.emit("message-seen", {
+          roomId: msg.roomId,
+          messageId: msg._id,
+          seenBy: session?.user?.id,
         });
-      }
+        // Mark as seen locally
+        setSeenMessageIds(prev => new Set([...prev, msg._id!]));
+      });
     }
   }, [messages, selectedUser, session?.user?.id]);
+
+  // Clear seen messages when selected user changes
+  useEffect(() => {
+    setSeenMessageIds(new Set());
+  }, [selectedUser._id]);
+
+  // Periodically emit seen status to ensure synchronization
+  useEffect(() => {
+    if (!selectedUser || !session?.user?.id || !socketRef.current) return;
+    
+    const interval = setInterval(() => {
+      const unreadMessages = messages.filter(
+        (msg) =>
+          msg.receiverId === session?.user?.id &&
+          msg.senderId === selectedUser._id &&
+          msg._id &&
+          !seenMessageIds.has(msg._id)
+      );
+      
+      if (unreadMessages.length > 0) {
+        console.log("Periodic seen emission for", unreadMessages.length, "messages");
+        unreadMessages.forEach((msg) => {
+          socketRef.current?.emit("message-seen", {
+            roomId: msg.roomId,
+            messageId: msg._id,
+            seenBy: session?.user?.id,
+          });
+          setSeenMessageIds(prev => new Set([...prev, msg._id!]));
+        });
+      }
+    }, 5000); // Emit every 5 seconds
+    
+    return () => clearInterval(interval);
+  }, [selectedUser, session?.user?.id, messages, seenMessageIds]);
 
   // Listen for 'message-seen' events
   useEffect(() => {
@@ -240,14 +364,14 @@ export default function UserChatRoom({ selectedUser, onUpdateLastMessage }: User
         seenData.seenBy === selectedUser._id &&
         session?.user?.id === messages.find(m => m._id === seenData.messageId)?.senderId
       ) {
-        setSeenMessageId(seenData.messageId);
+        setSeenMessageIds(prev => new Set([...prev, seenData.messageId]));
       }
     };
     socketRef.current.on("message-seen", handler);
     return () => socketRef.current?.off("message-seen", handler);
   }, [selectedUser, session?.user?.id, messages]);
 
-  // Handle page unload to update lastSeen
+  // Handle page unload to update lastSeen and window focus for seen status
   useEffect(() => {
     const handleBeforeUnload = () => {
       if (session?.user?.id) {
@@ -256,9 +380,39 @@ export default function UserChatRoom({ selectedUser, onUpdateLastMessage }: User
       }
     };
 
+    const handleWindowFocus = () => {
+      // When window gains focus, emit seen for all unread messages
+      if (selectedUser && session?.user?.id && socketRef.current && messages.length > 0) {
+        const unreadMessages = messages.filter(
+          (msg) =>
+            msg.receiverId === session?.user?.id &&
+            msg.senderId === selectedUser._id &&
+            msg._id &&
+            !seenMessageIds.has(msg._id)
+        );
+        
+        if (unreadMessages.length > 0) {
+          console.log("Window focused, emitting seen for", unreadMessages.length, "messages");
+          unreadMessages.forEach((msg) => {
+            socketRef.current?.emit("message-seen", {
+              roomId: msg.roomId,
+              messageId: msg._id,
+              seenBy: session?.user?.id,
+            });
+            setSeenMessageIds(prev => new Set([...prev, msg._id!]));
+          });
+        }
+      }
+    };
+
     window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [session?.user?.id]);
+    window.addEventListener('focus', handleWindowFocus);
+    
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('focus', handleWindowFocus);
+    };
+  }, [session?.user?.id, selectedUser, messages, seenMessageIds]);
 
   const handleSendMessage = async () => {
     if (!newMessage.trim() || !selectedUser || !session?.user?.id) return;
@@ -508,7 +662,7 @@ export default function UserChatRoom({ selectedUser, onUpdateLastMessage }: User
                   )}
                   <span className="inline-block text-[11px] text-[#93c5fd] mt-1 text-right pl-2 ">
                     {formatTime(msg.timestamp)}
-                    {isOwn && msg._id === seenMessageId && (
+                    {isOwn && msg._id && seenMessageIds.has(msg._id) && (
                       <span className="text-xs text-blue-400 ml-2">seen</span>
                     )}
                   </span>
