@@ -7,5 +7,6 @@ const messageSchema = new mongoose.Schema({
   fileType: String,
   originalName: String,
   timestamp: { type: Date, default: Date.now },
+  seenBy: { type: [String], default: [] }, // Track which users have seen the message
 });
 export default mongoose.models.Message || mongoose.model("Message", messageSchema);

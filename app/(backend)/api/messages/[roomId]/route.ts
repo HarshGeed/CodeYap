@@ -12,3 +12,23 @@ export const GET = async (
   });
   return NextResponse.json(messages, { status: 200 });
 };
+
+export const PATCH = async (
+  req: NextRequest,
+  { params }: { params: { roomId: string } }
+) => {
+  await connect();
+  const { messageId, userId } = await req.json();
+  if (!messageId || !userId) {
+    return NextResponse.json({ error: 'Missing messageId or userId' }, { status: 400 });
+  }
+  const msg = await Message.findByIdAndUpdate(
+    messageId,
+    { $addToSet: { seenBy: userId } },
+    { new: true }
+  );
+  if (!msg) {
+    return NextResponse.json({ error: 'Message not found' }, { status: 404 });
+  }
+  return NextResponse.json(msg, { status: 200 });
+};

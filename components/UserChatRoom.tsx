@@ -23,6 +23,7 @@ interface Message {
   fileType?: string;
   originalName?: string;
   sender?: string;
+  seenBy?: string[];
 }
 
 interface UserChatRoomProps {
@@ -224,24 +225,29 @@ export default function UserChatRoom({ selectedUser, onUpdateLastMessage }: User
       const res = await fetch(`/api/messages/${roomId}`);
       const data = await res.json();
       setMessages(data);
-      
       // After loading messages, emit seen for all messages from the selected user
       setTimeout(() => {
         const unreadMessages = data.filter(
           (msg: Message) =>
             msg.receiverId === session?.user?.id &&
             msg.senderId === selectedUser._id &&
-            msg._id
+            msg._id &&
+            !(msg.seenBy || []).includes(session.user.id)
         );
-        
         unreadMessages.forEach((msg: Message) => {
-          console.log("Emitting seen on room join for message:", msg._id);
+          // Emit seen event via socket
           socketRef.current?.emit("message-seen", {
             roomId: msg.roomId,
             messageId: msg._id,
             seenBy: session?.user?.id,
           });
           setSeenMessageIds(prev => new Set([...prev, msg._id!]));
+          // Update seenBy in the database
+          fetch(`/api/messages/${roomId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ messageId: msg._id, userId: session.user.id }),
+          });
         });
       }, 100); // Small delay to ensure messages are loaded
     })();

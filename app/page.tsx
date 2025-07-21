@@ -20,6 +20,8 @@ interface ConnectedUser {
   lastMessage?: string;
   status?: "online" | "offline";
   lastSeen?: string;
+  unread?: boolean; // Add unread property
+  lastMessageTime?: string; // Add lastMessageTime property
 }
 
 interface Group {
@@ -60,6 +62,8 @@ export default function HomePage() {
       setSelectedUser(user);
     }
     setSelectedGroup(null);
+    // Mark as read
+    setConnectedUsers(prev => prev.map(u => u._id === user._id ? { ...u, unread: false } : u));
   };
 
   const handleSearch = async (query: string) => {
@@ -86,13 +90,21 @@ export default function HomePage() {
   };
 
   const handleUpdateLastMessage = (userId: string, message: string) => {
-    setConnectedUsers(prev =>
-      prev.map(user =>
+    setConnectedUsers(prev => {
+      // Mark as unread if not currently selected
+      const updated = prev.map(user =>
         user._id === userId
-          ? { ...user, lastMessage: message }
+          ? { ...user, lastMessage: message, unread: selectedUser?._id !== userId }
           : user
-      )
-    );
+      );
+      // Sort: user with new message to top
+      updated.sort((a, b) => {
+        if (a._id === userId) return -1;
+        if (b._id === userId) return 1;
+        return 0;
+      });
+      return updated;
+    });
   };
 
 
@@ -142,12 +154,42 @@ export default function HomePage() {
 
     socketRef.current?.on("user-status", statusHandler);
 
+    // --- NEW: Listen for new messages globally ---
+    const receiveMessageHandler = (data: unknown) => {
+      const msg = data as { senderId: string; receiverId: string; message: string };
+      console.log('[receive-message] Incoming:', msg);
+      // Only update if the message is for the current user
+      if (msg.receiverId === session?.user?.id) {
+        setConnectedUsers(prev => {
+          console.log('[receive-message] Before update:', prev);
+          const updated = prev.map(user =>
+            user._id === msg.senderId
+              ? { ...user, lastMessage: msg.message, unread: selectedUser?._id !== msg.senderId ? true : false }
+              : user
+          );
+          // Sort: user with new message to top
+          updated.sort((a, b) => {
+            if (a._id === msg.senderId) return -1;
+            if (b._id === msg.senderId) return 1;
+            return 0;
+          });
+          console.log('[receive-message] After update:', updated);
+          return updated;
+        });
+      }
+    };
+    socketRef.current?.on("receive-message", receiveMessageHandler);
+    // --- END NEW ---
+
     return () => {
       socketRef.current?.off("connect", connectHandler);
       socketRef.current?.off("disconnect", disconnectHandler);
       socketRef.current?.off("user-status", statusHandler);
+      // --- NEW ---
+      socketRef.current?.off("receive-message", receiveMessageHandler);
+      // --- END NEW ---
     };
-  }, [session?.user?.id, connectedUsers.length]);
+  }, [session?.user?.id, connectedUsers.length, selectedUser?._id]);
 
   // After users are loaded, apply buffered status events
   useEffect(() => {
@@ -212,10 +254,27 @@ export default function HomePage() {
         // Initialize all users as offline initially (they'll be updated by socket events)
         const usersWithStatus = data.map((user: ConnectedUser) => ({
           ...user,
-          status: "offline" as const
+          status: "offline" as const,
+          unread: user.unread || false,
         }));
+        // Sort by lastMessageTime (descending)
+        usersWithStatus.sort((a: ConnectedUser, b: ConnectedUser) => {
+          if (a.lastMessageTime && b.lastMessageTime) {
+            return new Date(b.lastMessageTime).getTime() - new Date(a.lastMessageTime).getTime();
+          }
+          if (a.lastMessageTime) return -1;
+          if (b.lastMessageTime) return 1;
+          return 0;
+        });
         setConnectedUsers(usersWithStatus);
         console.log("Loaded connected users:", usersWithStatus);
+        // --- Join all private chat rooms so main page receives receive-message events ---
+        if (socketRef.current && session?.user?.id) {
+          data.forEach((user: ConnectedUser) => {
+            const roomId = [session.user.id, user._id].sort().join("_");
+            socketRef.current!.emit("join-room", roomId);
+          });
+        }
       } catch {
         setConnectedUsers([]);
       } finally {
@@ -316,7 +375,7 @@ export default function HomePage() {
                 {connectedUsers.map((user) => (
                   <li
                     key={user._id}
-                    className="flex items-center gap-3 bg-[#282d38] hover:bg-[#22304a] p-3 rounded-xl cursor-pointer transition"
+                    className={`flex items-center gap-3 bg-[#282d38] hover:bg-[#22304a] p-3 rounded-xl cursor-pointer transition ${user.unread ? 'border-2 border-[#60a5fa] bg-[#22304a]/60' : ''}`}
                     onClick={() => handleUserClick(user)}
                   >
                     <div className="h-14 w-14 bg-[#22304a] rounded-full relative border-2 border-[#2563eb]/30">
@@ -330,14 +389,14 @@ export default function HomePage() {
                       {user.status === "online" && (
                         <div className="absolute bottom-0 right-0 w-4 h-4 bg-green-500 rounded-full border-2 border-[#22304a]"></div>
                       )}
+                      {/* Unread badge */}
+                      {user.unread && (
+                        <div className="absolute top-0 right-0 w-3 h-3 bg-[#60a5fa] rounded-full border-2 border-[#22304a] animate-pulse"></div>
+                      )}
                     </div>
                     <div className="flex-1">
-                      <div className="font-medium text-base text-[#e0e7ef]">
-                        {user.username}
-                      </div>
-                      <div className="text-xs text-[#60a5fa]/80">
-                        {user.lastMessage || "No messages yet."}
-                      </div>
+                      <div className={`font-medium text-base ${user.unread ? 'text-[#60a5fa] font-bold' : 'text-[#e0e7ef]'}`}>{user.username}</div>
+                      <div className={`text-xs ${user.unread ? 'text-[#60a5fa]' : 'text-[#60a5fa]/80'}`}>{user.lastMessage || "No messages yet."}</div>
                     </div>
                   </li>
                 ))}

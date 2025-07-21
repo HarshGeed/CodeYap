@@ -28,6 +28,10 @@ export const GET = async (req: NextRequest, { params }: { params: { userId: stri
       return {
         ...conn.toObject(),
         lastMessage: lastMsg ? lastMsg.message : null,
+        lastMessageTime: lastMsg ? lastMsg.timestamp : null, // <-- add this line
+        unread: lastMsg
+          ? lastMsg.receiverId === params.userId && !(lastMsg.seenBy || []).includes(params.userId)
+          : false,
       };
     })
   );
