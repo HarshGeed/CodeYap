@@ -4,6 +4,7 @@ import Image from "next/image";
 import { Paperclip, Download } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { connectSocket, registerUser } from "@/lib/socket";
+import Link from "next/link";
 
 interface User {
   _id: string;
@@ -538,9 +539,11 @@ export default function UserChatRoom({ selectedUser, onUpdateLastMessage }: User
           className="rounded-full aspect-square object-cover border border-[#2563eb]"
         />
         <div className="flex flex-col">
+          <Link href={`/profile/${selectedUser._id}`}>
           <span className="font-bold text-xl text-[#c0cad6] tracking-wide">
             {selectedUser.username}
           </span>
+          </Link>
           <span className="text-xs text-[#60a5fa]">
             {isTyping
               ? "typing..."

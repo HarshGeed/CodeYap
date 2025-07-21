@@ -4,6 +4,7 @@ import Image from "next/image";
 import default_pfp from "@/public/default_pfp.jpg";
 import { useSession } from "next-auth/react";
 import { Paperclip } from "lucide-react";
+import { connectSocket } from "@/lib/socket";
 
 interface GroupChatRoomProps {
   group: {
@@ -37,6 +38,7 @@ export default function GroupChatRoom({ group }: GroupChatRoomProps) {
   } | null>(null);
   const [modalLoading, setModalLoading] = useState(true);
   const [uploadPercent, setUploadPercent] = useState<number | null>(null);
+  const [typingUsers, setTypingUsers] = useState<string[]>([]);
 
   function fileTypeFromUrl(url: string) {
     if (url.match(/\.(jpg|jpeg|png|gif|webp)$/i)) return "image";
@@ -189,6 +191,34 @@ export default function GroupChatRoom({ group }: GroupChatRoomProps) {
     });
   }, [group?._id, session?.user?.id]);
 
+  // Listen for group-typing events
+  useEffect(() => {
+    if (!group?._id || !session?.user?.id) return;
+    let cleanup: (() => void) | undefined;
+    import("@/lib/socket").then(({ connectSocket }) => {
+      if (!socketRef.current) {
+        socketRef.current = connectSocket();
+      }
+      const socket = socketRef.current;
+      const handleGroupTyping = (data: { groupId: string; userId: string; username: string }) => {
+        if (data.groupId === group._id && data.userId !== session.user.id) {
+          setTypingUsers((prev) => {
+            if (!prev.includes(data.username)) {
+              return [...prev, data.username];
+            }
+            return prev;
+          });
+          setTimeout(() => {
+            setTypingUsers((prev) => prev.filter((u) => u !== data.username));
+          }, 2000);
+        }
+      };
+      socket.on("group-typing", handleGroupTyping);
+      cleanup = () => socket.off("group-typing", handleGroupTyping);
+    });
+    return () => { if (cleanup) cleanup(); };
+  }, [group?._id, session?.user?.id]);
+
   const handleSendMessage = async () => {
     if (!newMessage.trim()) return;
 
@@ -223,6 +253,11 @@ export default function GroupChatRoom({ group }: GroupChatRoomProps) {
           <div className="font-bold text-xl text-[#c0cad6]">{group.name}</div>
           <div className="text-xs text-[#60a5fa]/80">
             {group.members.length} members
+            {typingUsers.length > 0 && (
+              <span className="ml-2 text-[#60a5fa]">
+                {typingUsers.join(", ")} {typingUsers.length === 1 ? "is" : "are"} typing...
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -398,7 +433,16 @@ export default function GroupChatRoom({ group }: GroupChatRoomProps) {
         <input
           className="flex-1 rounded-l-lg px-3 py-2 bg-[#171b24] text-[#e0e7ef] placeholder:text-[#64748b] border border-[#22304a] focus:outline-none focus:ring-1 focus:ring-[#2563eb] transition"
           value={newMessage}
-          onChange={(e) => setNewMessage(e.target.value)}
+          onChange={(e) => {
+            setNewMessage(e.target.value);
+            if (socketRef.current && group && session?.user?.id && session?.user?.username) {
+              socketRef.current.emit("group-typing", {
+                groupId: group._id,
+                userId: session.user.id,
+                username: session.user.username,
+              });
+            }
+          }}
           onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
           placeholder="Type your message..."
           disabled={uploading}

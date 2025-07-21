@@ -14,6 +14,7 @@ import NotificationModal from "./NotificationModal";
 import ShowGroupDialog from "./ShowGroupDialog";
 import { useSession } from "next-auth/react";
 import { signOut } from "next-auth/react";
+import { useRouter } from "next/navigation";
 
 const bebas = Bebas_Neue({
   subsets: ["latin"],
@@ -27,6 +28,7 @@ interface ConnectedUser {
 }
 
 export default function SideBar() {
+  const router = useRouter();
   const { data: session } = useSession();
   const userId = session?.user?.id;
 
@@ -51,80 +53,80 @@ export default function SideBar() {
   >([]);
   const [hasUnread, setHasUnread] = useState(false);
 
-const handleAcceptInvite = async (notif: any) => {
-  if (notif.meta?.type === "group-invite") {
-    // Accept group invite
-    await fetch("/api/connections/acceptInvite", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        userId,
-        notificationId: notif.id,
-        groupId: notif.meta?.groupId,
-      }),
-    });
-    setNotifications((prev) =>
-      prev.map((n) =>
-        n.id === notif.id
-          ? {
-              ...n,
-              message: `You joined the group "${notif.meta?.groupName}".`,
-              meta: { ...n.meta, accepted: true },
-            }
-          : n
-      )
-    );
-  } else {
-    // Accept connection invite
-    await fetch("/api/connections/acceptInvite", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        userId,
-        fromUserId: notif.meta?.fromUserId,
-        notificationId: notif.id,
-      }),
-    });
-    setNotifications((prev) =>
-      prev.map((n) =>
-        n.id === notif.id
-          ? {
-              ...n,
-              message: `You accepted ${notif.meta?.fromUsername}'s request.`,
-              meta: { ...n.meta, accepted: true },
-            }
-          : n
-      )
-    );
-  }
-};
+  const handleAcceptInvite = async (notif: any) => {
+    if (notif.meta?.type === "group-invite") {
+      // Accept group invite
+      await fetch("/api/connections/acceptInvite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId,
+          notificationId: notif.id,
+          groupId: notif.meta?.groupId,
+        }),
+      });
+      setNotifications((prev) =>
+        prev.map((n) =>
+          n.id === notif.id
+            ? {
+                ...n,
+                message: `You joined the group "${notif.meta?.groupName}".`,
+                meta: { ...n.meta, accepted: true },
+              }
+            : n
+        )
+      );
+    } else {
+      // Accept connection invite
+      await fetch("/api/connections/acceptInvite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId,
+          fromUserId: notif.meta?.fromUserId,
+          notificationId: notif.id,
+        }),
+      });
+      setNotifications((prev) =>
+        prev.map((n) =>
+          n.id === notif.id
+            ? {
+                ...n,
+                message: `You accepted ${notif.meta?.fromUsername}'s request.`,
+                meta: { ...n.meta, accepted: true },
+              }
+            : n
+        )
+      );
+    }
+  };
 
-const handleRejectInvite = async (notif: any) => {
-  if (notif.meta?.type === "group-invite") {
-    // Reject group invite
-    await fetch("/api/connections/rejectInvite", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        notificationId: notif.id,
-        groupId: notif.meta?.groupId,
-        userId,
-      }),
-    });
-    setNotifications((prev) => prev.filter((n) => n.id !== notif.id));
-  } else {
-    // Reject connection invite
-    await fetch("/api/connections/rejectInvite", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        notificationId: notif.id,
-        fromUserId: notif.meta?.fromUserId,
-      }),
-    });
-    setNotifications((prev) => prev.filter((n) => n.id !== notif.id));
-  }
-};
+  const handleRejectInvite = async (notif: any) => {
+    if (notif.meta?.type === "group-invite") {
+      // Reject group invite
+      await fetch("/api/connections/rejectInvite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          notificationId: notif.id,
+          groupId: notif.meta?.groupId,
+          userId,
+        }),
+      });
+      setNotifications((prev) => prev.filter((n) => n.id !== notif.id));
+    } else {
+      // Reject connection invite
+      await fetch("/api/connections/rejectInvite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          notificationId: notif.id,
+          fromUserId: notif.meta?.fromUserId,
+        }),
+      });
+      setNotifications((prev) => prev.filter((n) => n.id !== notif.id));
+    }
+  };
 
   // Fetch notifications from API
   useEffect(() => {
@@ -216,7 +218,7 @@ const handleRejectInvite = async (notif: any) => {
       icon: <User size={24} />,
       label: "Profile",
       onClick: () => {
-        // handle navigation to profile
+        router.push(`/profile/${userId}`);
       },
     },
     {
@@ -230,9 +232,9 @@ const handleRejectInvite = async (notif: any) => {
       icon: <LogOut size={24} />,
       label: "Log out",
       onClick: () => {
-       signOut()
+        signOut();
       },
-    },  
+    },
   ];
 
   return (
