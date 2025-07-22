@@ -5,6 +5,8 @@ export interface IGroup extends Document {
   members: mongoose.Types.ObjectId[];
   acceptedMembers: mongoose.Types.ObjectId[];
   admin: mongoose.Types.ObjectId;
+  description?: string;
+  profileImage?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -34,6 +36,15 @@ const groupSchema = new Schema<IGroup>(
       type: Schema.Types.ObjectId,
       ref: "User",
       required: true
+    },
+    description: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    profileImage: {
+      type: String,
+      default: "",
     },
   },
   { timestamps: true }
