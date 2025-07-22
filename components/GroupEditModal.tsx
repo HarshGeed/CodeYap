@@ -60,7 +60,7 @@ export default function GroupEditModal({
         body: formData,
       });
       const uploadData = await uploadRes.json();
-      newImageUrl = uploadData.urls?.[0];
+      newImageUrl = uploadData.urls?.[0]?.url;
     }
 
     await onSave({ ...form, profileImage: newImageUrl });
@@ -116,7 +116,6 @@ export default function GroupEditModal({
             onChange={handleChange}
             placeholder="Group Name"
             required
-            disabled
           />
           <textarea
             className="w-full p-2 rounded bg-[#181a20] text-white"

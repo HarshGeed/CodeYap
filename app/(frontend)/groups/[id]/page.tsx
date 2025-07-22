@@ -25,7 +25,7 @@ interface GroupProfile {
 export default function GroupProfilePage({ params }: { params: { id: string } }) {
   const { data: session } = useSession();
   const router = useRouter();
-  const groupId = params.id;
+  const {id: groupId} = React.use(params);
   const [group, setGroup] = useState<GroupProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -85,8 +85,7 @@ export default function GroupProfilePage({ params }: { params: { id: string } })
     });
     setRemovingMember("");
     if (res.ok) {
-      const data = await res.json();
-      setGroup(data.group);
+      window.location.reload();
     }
   };
 
@@ -103,8 +102,7 @@ export default function GroupProfilePage({ params }: { params: { id: string } })
     setChangeAdminOpen(false);
     setSelectedAdmin("");
     if (res.ok) {
-      const data = await res.json();
-      setGroup(data.group);
+      window.location.reload();
     }
   };
 
@@ -160,8 +158,7 @@ export default function GroupProfilePage({ params }: { params: { id: string } })
                       }),
                     });
                     if (res.ok) {
-                      const data = await res.json();
-                      setGroup(data.group);
+                      window.location.reload();
                     }
                   }}
                 />
