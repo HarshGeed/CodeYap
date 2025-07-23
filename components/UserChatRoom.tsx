@@ -1,22 +1,11 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo, useCallback, RefObject } from "react";
 import Image from "next/image";
-import { Paperclip, Download, Copy, Maximize2, Minimize2 } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { connectSocket, registerUser } from "@/lib/socket";
 import Link from "next/link";
-import MonacoEditor from "@monaco-editor/react";
-import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
-import { oneDark } from "react-syntax-highlighter/dist/cjs/styles/prism";
-
-// Fix CodeMessage export
-function CodeMessage({ code, language }: { code: string; language: string }) {
-  return (
-    <SyntaxHighlighter language={language} style={oneDark} wrapLongLines>
-      {code}
-    </SyntaxHighlighter>
-  );
-}
+import MessageList from "./MessageList";
+import ChatInputBar from "./ChatInputBar";
 
 interface User {
   _id: string;
@@ -55,18 +44,13 @@ interface Socket {
   off: (event: string, handler: (data: unknown) => void) => void;
 }
 
-// @ts-expect-error No types for react-syntax-highlighter
-declare module 'react-syntax-highlighter';
-// @ts-expect-error No types for react-syntax-highlighter prism styles
-declare module 'react-syntax-highlighter/dist/cjs/styles/prism';
-
 export default function UserChatRoom({ selectedUser, onUpdateLastMessage }: UserChatRoomProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [uploading, setUploading] = useState(false);
   const [uploadPercent, setUploadPercent] = useState<number | null>(null);
   const socketRef = useRef<Socket | null>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const bottomRef: RefObject<HTMLDivElement> = useRef<HTMLDivElement>(null);
   const { data: session } = useSession();
   const [modalMedia, setModalMedia] = useState<{ type: string; src: string } | null>(null);
   const [modalLoading, setModalLoading] = useState(true);
@@ -75,7 +59,6 @@ export default function UserChatRoom({ selectedUser, onUpdateLastMessage }: User
   const [codeMode, setCodeMode] = useState(false);
   const [codeContent, setCodeContent] = useState("");
   const [codeLanguage, setCodeLanguage] = useState("javascript");
-  const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
 
   // Local state for user status and lastSeen
   const [userStatus, setUserStatus] = useState<{ status: string; lastSeen?: string }>({
@@ -586,12 +569,43 @@ export default function UserChatRoom({ selectedUser, onUpdateLastMessage }: User
     }
   };
 
-  // Copy code to clipboard
-  const handleCopyCode = (code: string, idx: number) => {
-    navigator.clipboard.writeText(code);
-    setCopiedIdx(idx);
-    setTimeout(() => setCopiedIdx(null), 1200);
-  };
+  // Memoized utility functions
+  const memoizedFormatTime = useCallback((dateStr: string) => {
+    const date = new Date(dateStr);
+    return date.toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    });
+  }, []);
+
+  const memoizedFormatDate = useCallback((dateStr: string) => {
+    const date = new Date(dateStr);
+    const today = new Date();
+    if (
+      date.getDate() === today.getDate() &&
+      date.getMonth() === today.getMonth() &&
+      date.getFullYear() === today.getFullYear()
+    ) {
+      return "Today";
+    }
+    return date.toLocaleDateString(undefined, {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  }, []);
+
+  const memoizedFileTypeFromUrl = useCallback((url: string | undefined | null) => {
+    if (!url || typeof url !== "string") return "file";
+    if (url.match(/\.(jpg|jpeg|png|gif|webp)$/i)) return "image";
+    if (url.match(/\.(mp4|webm|ogg|mov)$/i)) return "video";
+    if (url.match(/\.(pdf|docx?|pptx?|xlsx?|txt)$/i)) return "document";
+    return "file";
+  }, []);
+
+  const memoizedSeenMessageIds = useMemo(() => seenMessageIds, [seenMessageIds]);
+  const memoizedMessages = useMemo(() => messages, [messages]);
 
   return (
     <div className="flex flex-col h-full">
@@ -622,309 +636,36 @@ export default function UserChatRoom({ selectedUser, onUpdateLastMessage }: User
         </div>
       </div>
       {/* Chat messages */}
-      <div className="flex-1 overflow-y-auto p-4 rounded">
-        {messages.map((msg, idx) => {
-          const msgDate = new Date(msg.timestamp).toDateString();
-          const showDate =
-            idx === 0 || msgDate !== new Date(messages[idx - 1].timestamp).toDateString();
-          const isOwn = (msg.sender || msg.senderId) === (session?.user?.id ?? "");
-          const type = msg.fileType || fileTypeFromUrl(msg.message);
-
-          // Render code message
-          if (msg.contentType === "code" && msg.code) {
-            return (
-              <div key={idx}>
-                {showDate && (
-                  <div className="flex justify-center my-2">
-                    <span className="bg-[#22304a] text-[#60a5fa] text-xs px-4 py-1 rounded-full shadow my-3">
-                      {formatDate(msg.timestamp)}
-                    </span>
-                  </div>
-                )}
-                <div className={`mb-2 flex ${isOwn ? "justify-end" : "justify-start"}`}>
-                  <span className={`relative max-w-[70%] break-words px-3 py-2 rounded-lg shadow ${isOwn ? "bg-[#3f495f] text-white rounded-br-sm" : "bg-[#22304a] text-[#e0e7ef] rounded-bl-sm"}`}>
-                    {/* Copy button */}
-                    <button
-                      className="absolute top-2 right-2 p-1 bg-[#171b24] rounded hover:bg-[#2563eb] transition text-[#60a5fa] text-xs flex items-center"
-                      style={{ zIndex: 2 }}
-                      onClick={() => handleCopyCode(msg.code.content, idx)}
-                      title="Copy code"
-                    >
-                      <Copy size={14} />
-                      {copiedIdx === idx && (
-                        <span className="ml-1 text-green-400 text-xs">Copied!</span>
-                      )}
-                    </button>
-                    <CodeMessage code={msg.code.content} language={msg.code.language} />
-                    <span className="inline-block text-[11px] text-[#93c5fd] mt-1 text-right pl-2 ">
-                      {formatTime(msg.timestamp)}
-                      {isOwn && msg._id && seenMessageIds.has(msg._id) && (
-                        <span className="text-xs text-blue-400 ml-2">seen</span>
-                      )}
-                    </span>
-                  </span>
-                </div>
-              </div>
-            );
-          }
-
-          return (
-            <div key={idx}>
-              {showDate && (
-                <div className="flex justify-center my-2">
-                  <span className="bg-[#22304a] text-[#60a5fa] text-xs px-4 py-1 rounded-full shadow my-3">
-                    {formatDate(msg.timestamp)}
-                  </span>
-                </div>
-              )}
-              <div
-                className={`mb-2 flex ${
-                  isOwn ? "justify-end" : "justify-start"
-                }`}
-              >
-                <span
-                  className={`max-w-[70%] break-words px-3 py-2 rounded-lg shadow ${
-                    isOwn
-                      ? "bg-[#3f495f] text-white rounded-br-sm"
-                      : "bg-[#22304a] text-[#e0e7ef] rounded-bl-sm"
-                  }`}
-                >
-                  {/* Render file or text */}
-                  {type === "image" ? (
-                    <div
-                      className="cursor-pointer"
-                      onClick={() => {
-                        setModalLoading(true);
-                        setModalMedia({ type: "image", src: msg.message });
-                      }}
-                    >
-                      <Image
-                        src={msg.message}
-                        alt="uploaded"
-                        width={320}
-                        height={240}
-                        onLoad={() => {
-                          setTimeout(() => {
-                            requestAnimationFrame(() => {
-                              bottomRef.current?.scrollIntoView({
-                                behavior: "smooth",
-                              });
-                            });
-                          }, 100);
-                        }}
-                        style={{
-                          objectFit: "contain",
-                          borderRadius: "0.5rem",
-                          maxWidth: "20rem",
-                          maxHeight: "15rem",
-                          width: "100%",
-                          height: "auto",
-                        }}
-                        className="rounded-lg"
-                      />
-                    </div>
-                  ) : type === "video" ? (
-                    <video
-                      src={msg.message}
-                      controls
-                      className="max-w-md max-h-[22rem] rounded-lg"
-                      width={400}
-                      height={320}
-                      onLoad={() => {
-                        setTimeout(() => {
-                          requestAnimationFrame(() => {
-                            bottomRef.current?.scrollIntoView({
-                              behavior: "smooth",
-                            });
-                          });
-                        }, 100);
-                      }}
-                    />
-                  ) : type === "document" ? (
-                    <div className="flex items-center gap-3 bg-[#22304a] rounded-lg px-3 py-2">
-                      <span className="text-2xl">📄</span>
-                      <div className="flex flex-col">
-                        <span className="text-sm font-semibold text-[#60a5fa]">
-                          {msg.originalName ||
-                            (() => {
-                              try {
-                                const urlObj = new URL(msg.message);
-                                return decodeURIComponent(
-                                  urlObj.pathname.split("/").pop() || "Document"
-                                );
-                              } catch {
-                                return "Document";
-                              }
-                            })()}
-                        </span>
-                      </div>
-                      <a
-                        href={msg.message}
-                        download={msg.originalName || undefined}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="ml-auto text-[#60a5fa] hover:text-blue-400 p-2 rounded transition"
-                        title="Download"
-                      >
-                        <Download size={22} />
-                      </a>
-                    </div>
-                  ) : (
-                    msg.message
-                  )}
-                  <span className="inline-block text-[11px] text-[#93c5fd] mt-1 text-right pl-2 ">
-                    {formatTime(msg.timestamp)}
-                    {isOwn && msg._id && seenMessageIds.has(msg._id) && (
-                      <span className="text-xs text-blue-400 ml-2">seen</span>
-                    )}
-                  </span>
-                </span>
-              </div>
-            </div>
-          );
-        })}
-        <div ref={bottomRef} />
-      </div>
-      {/* Input and upload */}
-      {codeMode ? (
-        <div className="w-full flex flex-col items-start mt-2 px-4 pb-4 rounded-2xl shadow-lg bg-[#181a20] border border-[#22304a] transition-all duration-300">
-          <div className="w-full">
-            <MonacoEditor
-              height="260px"
-              language={codeLanguage}
-              value={codeContent}
-              theme="vs-dark"
-              onChange={(val: string | undefined) => setCodeContent(val || "")}
-              options={{
-                minimap: { enabled: false },
-                fontSize: 15,
-                scrollBeyondLastLine: false,
-                wordWrap: "on",
-                lineNumbers: "on",
-                scrollbar: { vertical: "hidden", horizontal: "hidden" },
-                overviewRulerLanes: 0,
-                hideCursorInOverviewRuler: true,
-                overviewRulerBorder: false,
-                renderLineHighlight: "none",
-                folding: false,
-                contextmenu: false,
-                quickSuggestions: true,
-                suggestOnTriggerCharacters: true,
-                tabSize: 2,
-                padding: { top: 8, bottom: 8 },
-                theme: "vs-dark",
-              }}
-              className="rounded-lg border border-[#22304a] bg-[#171b24] text-[#e0e7ef]"
-            />
-          </div>
-          <div className="w-full flex flex-row items-center gap-2 mt-2">
-            <label className="cursor-pointer bg-[#22304a] text-[#60a5fa] px-3 py-2 rounded-lg shadow border border-[#22304a] hover:bg-[#2563eb]/20 transition">
-              <input
-                type="file"
-                multiple
-                hidden
-                onChange={handleFileChange}
-                accept="image/*,video/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt"
-                disabled={uploading}
-              />
-              {uploading
-                ? uploadPercent !== null
-                  ? `${uploadPercent}%`
-                  : "Uploading..."
-                : <Paperclip />}
-            </label>
-            <button
-              className={`px-3 py-2 rounded-lg shadow border ${codeMode ? "bg-blue-700 text-white" : "bg-[#22304a] text-[#60a5fa]"} hover:bg-blue-800 transition`}
-              onClick={() => setCodeMode((prev) => !prev)}
-              type="button"
-              disabled={uploading}
-            >
-              {codeMode ? "Text" : "Code"}
-            </button>
-            <select
-              className="rounded-lg px-2 py-2 bg-[#171b24] text-[#e0e7ef] border border-[#22304a] focus:outline-none focus:ring-1 focus:ring-[#2563eb] transition"
-              value={codeLanguage}
-              onChange={(e) => setCodeLanguage(e.target.value)}
-              style={{ minWidth: 100 }}
-            >
-              <option value="javascript">JavaScript</option>
-              <option value="python">Python</option>
-              <option value="java">Java</option>
-              <option value="c">C</option>
-              <option value="cpp">C++</option>
-              <option value="typescript">TypeScript</option>
-              <option value="go">Go</option>
-              <option value="php">PHP</option>
-              <option value="ruby">Ruby</option>
-              <option value="rust">Rust</option>
-              <option value="kotlin">Kotlin</option>
-              <option value="swift">Swift</option>
-              <option value="csharp">C#</option>
-              <option value="shell">Shell</option>
-              <option value="sql">SQL</option>
-              <option value="plaintext">Plain Text</option>
-            </select>
-            <button
-              className="bg-[#2563eb] hover:bg-[#1d4ed8] text-white px-6 py-2 rounded-lg shadow transition"
-              onClick={handleSendMessage}
-              disabled={uploading || !codeContent.trim()}
-              type="button"
-            >
-              Send
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div className="flex mt-2 px-4 pb-4 items-center gap-2 rounded-2xl shadow-lg bg-[#181a20] border border-[#22304a] transition-all duration-300">
-          <label className="cursor-pointer bg-[#22304a] text-[#60a5fa] px-3 py-2 rounded-lg shadow border border-[#22304a] hover:bg-[#2563eb]/20 transition">
-            <input
-              type="file"
-              multiple
-              hidden
-              onChange={handleFileChange}
-              accept="image/*,video/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt"
-              disabled={uploading}
-            />
-            {uploading
-              ? uploadPercent !== null
-                ? `${uploadPercent}%`
-                : "Uploading..."
-              : <Paperclip />}
-          </label>
-          <button
-            className={`px-3 py-2 rounded-lg shadow border ${codeMode ? "bg-blue-700 text-white" : "bg-[#22304a] text-[#60a5fa]"} hover:bg-blue-800 transition`}
-            onClick={() => setCodeMode((prev) => !prev)}
-            type="button"
-            disabled={uploading}
-          >
-            {codeMode ? "Text" : "Code"}
-          </button>
-          <input
-            className="flex-1 rounded-l-lg px-3 py-2 bg-[#171b24] text-[#e0e7ef] placeholder:text-[#64748b] border border-[#22304a] focus:outline-none focus:ring-1 focus:ring-[#2563eb] transition"
-            value={newMessage}
-            onChange={(e) => {
-              setNewMessage(e.target.value);
-              if (socketRef.current && selectedUser && session?.user?.id) {
-                socketRef.current.emit("typing", {
-                  roomId: getRoomId(session.user.id, selectedUser._id),
-                  userId: session.user.id,
-                });
-              }
-            }}
-            onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
-            placeholder="Type your message..."
-            disabled={uploading}
-          />
-          <button
-            className="bg-[#2563eb] hover:bg-[#1d4ed8] text-white px-6 py-2 rounded-r-lg shadow transition"
-            onClick={handleSendMessage}
-            disabled={uploading}
-            type="button"
-          >
-            Send
-          </button>
-        </div>
-      )}
+      <MessageList
+        messages={memoizedMessages}
+        sessionUserId={session?.user?.id ?? ""}
+        selectedUserId={selectedUser._id}
+        seenMessageIds={memoizedSeenMessageIds}
+        formatTime={memoizedFormatTime}
+        formatDate={memoizedFormatDate}
+        fileTypeFromUrl={memoizedFileTypeFromUrl}
+        onCopyCode={() => {}}
+        setModalMedia={setModalMedia}
+        setModalLoading={setModalLoading}
+        bottomRef={bottomRef}
+      />
+      <ChatInputBar
+        codeMode={codeMode}
+        setCodeMode={setCodeMode}
+        codeContent={codeContent}
+        setCodeContent={setCodeContent}
+        codeLanguage={codeLanguage}
+        setCodeLanguage={setCodeLanguage}
+        newMessage={newMessage}
+        setNewMessage={setNewMessage}
+        uploading={uploading}
+        uploadPercent={uploadPercent}
+        handleFileChange={handleFileChange}
+        handleSendMessage={handleSendMessage}
+        session={session}
+        selectedUser={selectedUser}
+        socketRef={socketRef}
+      />
       {/* Modal for media preview */}
       {modalMedia && (
         <div
