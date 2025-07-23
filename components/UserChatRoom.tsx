@@ -5,6 +5,18 @@ import { Paperclip, Download } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { connectSocket, registerUser } from "@/lib/socket";
 import Link from "next/link";
+import MonacoEditor from "@monaco-editor/react";
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import { oneDark } from "react-syntax-highlighter/dist/cjs/styles/prism";
+
+// Fix CodeMessage export
+function CodeMessage({ code, language }: { code: string; language: string }) {
+  return (
+    <SyntaxHighlighter language={language} style={oneDark} wrapLongLines>
+      {code}
+    </SyntaxHighlighter>
+  );
+}
 
 interface User {
   _id: string;
@@ -25,6 +37,11 @@ interface Message {
   originalName?: string;
   sender?: string;
   seenBy?: string[];
+  contentType?: string;
+  code?: {
+    language: string;
+    content: string;
+  };
 }
 
 interface UserChatRoomProps {
@@ -38,6 +55,11 @@ interface Socket {
   off: (event: string, handler: (data: unknown) => void) => void;
 }
 
+// @ts-expect-error No types for react-syntax-highlighter
+declare module 'react-syntax-highlighter';
+// @ts-expect-error No types for react-syntax-highlighter prism styles
+declare module 'react-syntax-highlighter/dist/cjs/styles/prism';
+
 export default function UserChatRoom({ selectedUser, onUpdateLastMessage }: UserChatRoomProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
@@ -50,6 +72,9 @@ export default function UserChatRoom({ selectedUser, onUpdateLastMessage }: User
   const [modalLoading, setModalLoading] = useState(true);
   const [isTyping, setIsTyping] = useState(false);
   const [seenMessageIds, setSeenMessageIds] = useState<Set<string>>(new Set());
+  const [codeMode, setCodeMode] = useState(false);
+  const [codeContent, setCodeContent] = useState("");
+  const [codeLanguage, setCodeLanguage] = useState("javascript");
 
   // Local state for user status and lastSeen
   const [userStatus, setUserStatus] = useState<{ status: string; lastSeen?: string }>({
@@ -136,7 +161,8 @@ export default function UserChatRoom({ selectedUser, onUpdateLastMessage }: User
     [userId1, userId2].sort().join("_");
 
   // Helper to guess file type from URL
-  function fileTypeFromUrl(url: string) {
+  function fileTypeFromUrl(url: string | undefined | null) {
+    if (!url || typeof url !== "string") return "file";
     if (url.match(/\.(jpg|jpeg|png|gif|webp)$/i)) return "image";
     if (url.match(/\.(mp4|webm|ogg|mov)$/i)) return "video";
     if (url.match(/\.(pdf|docx?|pptx?|xlsx?|txt)$/i)) return "document";
@@ -216,7 +242,7 @@ export default function UserChatRoom({ selectedUser, onUpdateLastMessage }: User
   // Join room and fetch messages when user is selected
   useEffect(() => {
     if (!selectedUser || !session?.user?.id) return;
-    const roomId = getRoomId(session.user.id, selectedUser._id);
+    const roomId = getRoomId(session?.user?.id || "", selectedUser._id);
 
     // Join room
     socketRef.current?.emit("join-room", roomId);
@@ -225,6 +251,7 @@ export default function UserChatRoom({ selectedUser, onUpdateLastMessage }: User
     (async () => {
       const res = await fetch(`/api/messages/${roomId}`);
       const data = await res.json();
+      console.log("[DEBUG] Messages fetched from backend:", data);
       setMessages(data);
       // After loading messages, emit seen for all messages from the selected user
       setTimeout(() => {
@@ -244,11 +271,13 @@ export default function UserChatRoom({ selectedUser, onUpdateLastMessage }: User
           });
           setSeenMessageIds(prev => new Set([...prev, msg._id!]));
           // Update seenBy in the database
-          fetch(`/api/messages/${roomId}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ messageId: msg._id, userId: session.user.id }),
-          });
+          fetch(`/api/messages/${roomId}`,
+            {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ messageId: msg._id, userId: session.user.id }),
+            }
+          );
         });
       }, 100); // Small delay to ensure messages are loaded
     })();
@@ -422,12 +451,40 @@ export default function UserChatRoom({ selectedUser, onUpdateLastMessage }: User
   }, [session?.user?.id, selectedUser, messages, seenMessageIds]);
 
   const handleSendMessage = async () => {
+    if (codeMode) {
+      if (!codeContent.trim() || !selectedUser || !session?.user?.id) return;
+      const roomId = getRoomId(session?.user?.id || "", selectedUser._id);
+      const msgObj = {
+        roomId,
+        senderId: session?.user?.id || "",
+        receiverId: selectedUser._id,
+        timestamp: new Date().toISOString(),
+        contentType: "code",
+        code: {
+          language: codeLanguage,
+          content: codeContent,
+        },
+      };
+      // Save to backend and get the message with _id
+      const res = await fetch("/api/messages/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(msgObj),
+      });
+      const savedMsg = await res.json();
+      console.log("[DEBUG] Message sent and saved:", savedMsg);
+      socketRef.current?.emit("send-message", savedMsg);
+      setCodeContent("");
+      setCodeMode(false);
+      onUpdateLastMessage(selectedUser._id, "[code]");
+      return;
+    }
     if (!newMessage.trim() || !selectedUser || !session?.user?.id) return;
-    const roomId = getRoomId(session.user.id, selectedUser._id);
+    const roomId = getRoomId(session?.user?.id || "", selectedUser._id);
     const msgObj = {
       roomId,
       message: newMessage,
-      senderId: session.user.id,
+      senderId: session?.user?.id || "",
       receiverId: selectedUser._id,
       timestamp: new Date().toISOString(),
     };
@@ -439,6 +496,7 @@ export default function UserChatRoom({ selectedUser, onUpdateLastMessage }: User
       body: JSON.stringify(msgObj),
     });
     const savedMsg = await res.json();
+    console.log("[DEBUG] Message sent and saved:", savedMsg);
 
     // Emit via socket (do NOT add to state here)
     socketRef.current?.emit("send-message", savedMsg);
@@ -560,10 +618,35 @@ export default function UserChatRoom({ selectedUser, onUpdateLastMessage }: User
         {messages.map((msg, idx) => {
           const msgDate = new Date(msg.timestamp).toDateString();
           const showDate =
-            idx === 0 ||
-            msgDate !== new Date(messages[idx - 1].timestamp).toDateString();
-          const isOwn = (msg.sender || msg.senderId) === session?.user?.id;
+            idx === 0 || msgDate !== new Date(messages[idx - 1].timestamp).toDateString();
+          const isOwn = (msg.sender || msg.senderId) === (session?.user?.id ?? "");
           const type = msg.fileType || fileTypeFromUrl(msg.message);
+
+          // Render code message
+          if (msg.contentType === "code" && msg.code) {
+            return (
+              <div key={idx}>
+                {showDate && (
+                  <div className="flex justify-center my-2">
+                    <span className="bg-[#22304a] text-[#60a5fa] text-xs px-4 py-1 rounded-full shadow my-3">
+                      {formatDate(msg.timestamp)}
+                    </span>
+                  </div>
+                )}
+                <div className={`mb-2 flex ${isOwn ? "justify-end" : "justify-start"}`}>
+                  <span className={`max-w-[70%] break-words px-3 py-2 rounded-lg shadow ${isOwn ? "bg-[#3f495f] text-white rounded-br-sm" : "bg-[#22304a] text-[#e0e7ef] rounded-bl-sm"}`}>
+                    <CodeMessage code={msg.code.content} language={msg.code.language} />
+                    <span className="inline-block text-[11px] text-[#93c5fd] mt-1 text-right pl-2 ">
+                      {formatTime(msg.timestamp)}
+                      {isOwn && msg._id && seenMessageIds.has(msg._id) && (
+                        <span className="text-xs text-blue-400 ml-2">seen</span>
+                      )}
+                    </span>
+                  </span>
+                </div>
+              </div>
+            );
+          }
 
           return (
             <div key={idx}>
@@ -700,30 +783,105 @@ export default function UserChatRoom({ selectedUser, onUpdateLastMessage }: User
               : "Uploading..."
             : <Paperclip />}
         </label>
-        {/* Text input and send button */}
-        <input
-          className="flex-1 rounded-l-lg px-3 py-2 bg-[#171b24] text-[#e0e7ef] placeholder:text-[#64748b] border border-[#22304a] focus:outline-none focus:ring-1 focus:ring-[#2563eb] transition"
-          value={newMessage}
-          onChange={(e) => {
-            setNewMessage(e.target.value);
-            if (socketRef.current && selectedUser && session?.user?.id) {
-              socketRef.current.emit("typing", {
-                roomId: getRoomId(session.user.id, selectedUser._id),
-                userId: session.user.id,
-              });
-            }
-          }}
-          onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
-          placeholder="Type your message..."
-          disabled={uploading}
-        />
+        {/* Code button */}
         <button
-          className="bg-[#2563eb] hover:bg-[#1d4ed8] text-white px-6 py-2 rounded-r-lg shadow transition"
-          onClick={handleSendMessage}
+          className={`px-3 py-2 rounded-lg shadow border ${codeMode ? "bg-blue-700 text-white" : "bg-[#22304a] text-[#60a5fa]"} hover:bg-blue-800 transition`}
+          onClick={() => setCodeMode((prev) => !prev)}
+          type="button"
           disabled={uploading}
         >
-          Send
+          {codeMode ? "Text" : "Code"}
         </button>
+        {/* Text input and send button or Monaco editor */}
+        {codeMode ? (
+          <>
+            <select
+              className="rounded-l-lg px-2 py-2 bg-[#171b24] text-[#e0e7ef] border border-[#22304a] focus:outline-none focus:ring-1 focus:ring-[#2563eb] transition"
+              value={codeLanguage}
+              onChange={(e) => setCodeLanguage(e.target.value)}
+              style={{ minWidth: 100 }}
+            >
+              <option value="javascript">JavaScript</option>
+              <option value="python">Python</option>
+              <option value="java">Java</option>
+              <option value="c">C</option>
+              <option value="cpp">C++</option>
+              <option value="typescript">TypeScript</option>
+              <option value="go">Go</option>
+              <option value="php">PHP</option>
+              <option value="ruby">Ruby</option>
+              <option value="rust">Rust</option>
+              <option value="kotlin">Kotlin</option>
+              <option value="swift">Swift</option>
+              <option value="csharp">C#</option>
+              <option value="shell">Shell</option>
+              <option value="sql">SQL</option>
+              <option value="plaintext">Plain Text</option>
+            </select>
+            <div className="flex-1 min-w-0">
+              <MonacoEditor
+                height="80px"
+                language={codeLanguage}
+                value={codeContent}
+                onChange={(val: string | undefined) => setCodeContent(val || "")}
+                options={{
+                  minimap: { enabled: false },
+                  fontSize: 14,
+                  scrollBeyondLastLine: false,
+                  wordWrap: "on",
+                  lineNumbers: "off",
+                  scrollbar: { vertical: "hidden", horizontal: "hidden" },
+                  overviewRulerLanes: 0,
+                  hideCursorInOverviewRuler: true,
+                  overviewRulerBorder: false,
+                  renderLineHighlight: "none",
+                  folding: false,
+                  contextmenu: false,
+                  quickSuggestions: false,
+                  suggestOnTriggerCharacters: false,
+                  tabSize: 2,
+                  padding: { top: 8, bottom: 8 },
+                }}
+                className="rounded-r-lg border border-[#22304a] bg-[#171b24] text-[#e0e7ef]"
+              />
+            </div>
+            <button
+              className="bg-[#2563eb] hover:bg-[#1d4ed8] text-white px-6 py-2 rounded-r-lg shadow transition"
+              onClick={handleSendMessage}
+              disabled={uploading || !codeContent.trim()}
+              type="button"
+            >
+              Send
+            </button>
+          </>
+        ) : (
+          <>
+            <input
+              className="flex-1 rounded-l-lg px-3 py-2 bg-[#171b24] text-[#e0e7ef] placeholder:text-[#64748b] border border-[#22304a] focus:outline-none focus:ring-1 focus:ring-[#2563eb] transition"
+              value={newMessage}
+              onChange={(e) => {
+                setNewMessage(e.target.value);
+                if (socketRef.current && selectedUser && session?.user?.id) {
+                  socketRef.current.emit("typing", {
+                    roomId: getRoomId(session.user.id, selectedUser._id),
+                    userId: session.user.id,
+                  });
+                }
+              }}
+              onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
+              placeholder="Type your message..."
+              disabled={uploading}
+            />
+            <button
+              className="bg-[#2563eb] hover:bg-[#1d4ed8] text-white px-6 py-2 rounded-r-lg shadow transition"
+              onClick={handleSendMessage}
+              disabled={uploading}
+              type="button"
+            >
+              Send
+            </button>
+          </>
+        )}
       </div>
       {/* Modal for media preview */}
       {modalMedia && (

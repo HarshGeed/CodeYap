@@ -8,5 +8,10 @@ const messageSchema = new mongoose.Schema({
   originalName: String,
   timestamp: { type: Date, default: Date.now },
   seenBy: { type: [String], default: [] }, // Track which users have seen the message
+  contentType: { type: String, default: "text" },
+  code: {
+    language: String,
+    content: String,
+  },
 });
 export default mongoose.models.Message || mongoose.model("Message", messageSchema);
