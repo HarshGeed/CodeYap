@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
-import { Paperclip, Download } from "lucide-react";
+import { Paperclip, Download, Copy, Maximize2, Minimize2 } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { connectSocket, registerUser } from "@/lib/socket";
 import Link from "next/link";
@@ -75,6 +75,7 @@ export default function UserChatRoom({ selectedUser, onUpdateLastMessage }: User
   const [codeMode, setCodeMode] = useState(false);
   const [codeContent, setCodeContent] = useState("");
   const [codeLanguage, setCodeLanguage] = useState("javascript");
+  const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
 
   // Local state for user status and lastSeen
   const [userStatus, setUserStatus] = useState<{ status: string; lastSeen?: string }>({
@@ -585,6 +586,13 @@ export default function UserChatRoom({ selectedUser, onUpdateLastMessage }: User
     }
   };
 
+  // Copy code to clipboard
+  const handleCopyCode = (code: string, idx: number) => {
+    navigator.clipboard.writeText(code);
+    setCopiedIdx(idx);
+    setTimeout(() => setCopiedIdx(null), 1200);
+  };
+
   return (
     <div className="flex flex-col h-full">
       {/* Header with profile image, username, and status */}
@@ -634,7 +642,19 @@ export default function UserChatRoom({ selectedUser, onUpdateLastMessage }: User
                   </div>
                 )}
                 <div className={`mb-2 flex ${isOwn ? "justify-end" : "justify-start"}`}>
-                  <span className={`max-w-[70%] break-words px-3 py-2 rounded-lg shadow ${isOwn ? "bg-[#3f495f] text-white rounded-br-sm" : "bg-[#22304a] text-[#e0e7ef] rounded-bl-sm"}`}>
+                  <span className={`relative max-w-[70%] break-words px-3 py-2 rounded-lg shadow ${isOwn ? "bg-[#3f495f] text-white rounded-br-sm" : "bg-[#22304a] text-[#e0e7ef] rounded-bl-sm"}`}>
+                    {/* Copy button */}
+                    <button
+                      className="absolute top-2 right-2 p-1 bg-[#171b24] rounded hover:bg-[#2563eb] transition text-[#60a5fa] text-xs flex items-center"
+                      style={{ zIndex: 2 }}
+                      onClick={() => handleCopyCode(msg.code.content, idx)}
+                      title="Copy code"
+                    >
+                      <Copy size={14} />
+                      {copiedIdx === idx && (
+                        <span className="ml-1 text-green-400 text-xs">Copied!</span>
+                      )}
+                    </button>
                     <CodeMessage code={msg.code.content} language={msg.code.language} />
                     <span className="inline-block text-[11px] text-[#93c5fd] mt-1 text-right pl-2 ">
                       {formatTime(msg.timestamp)}
@@ -766,37 +786,63 @@ export default function UserChatRoom({ selectedUser, onUpdateLastMessage }: User
         <div ref={bottomRef} />
       </div>
       {/* Input and upload */}
-      <div className="flex mt-2 px-4 pb-4 items-center gap-2">
-        {/* File upload button */}
-        <label className="cursor-pointer bg-[#22304a] text-[#60a5fa] px-3 py-2 rounded-lg shadow border border-[#22304a] hover:bg-[#2563eb]/20 transition">
-          <input
-            type="file"
-            multiple
-            hidden
-            onChange={handleFileChange}
-            accept="image/*,video/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt"
-            disabled={uploading}
-          />
-          {uploading
-            ? uploadPercent !== null
-              ? `${uploadPercent}%`
-              : "Uploading..."
-            : <Paperclip />}
-        </label>
-        {/* Code button */}
-        <button
-          className={`px-3 py-2 rounded-lg shadow border ${codeMode ? "bg-blue-700 text-white" : "bg-[#22304a] text-[#60a5fa]"} hover:bg-blue-800 transition`}
-          onClick={() => setCodeMode((prev) => !prev)}
-          type="button"
-          disabled={uploading}
-        >
-          {codeMode ? "Text" : "Code"}
-        </button>
-        {/* Text input and send button or Monaco editor */}
-        {codeMode ? (
-          <>
+      {codeMode ? (
+        <div className="w-full flex flex-col items-start mt-2 px-4 pb-4 rounded-2xl shadow-lg bg-[#181a20] border border-[#22304a] transition-all duration-300">
+          <div className="w-full">
+            <MonacoEditor
+              height="260px"
+              language={codeLanguage}
+              value={codeContent}
+              theme="vs-dark"
+              onChange={(val: string | undefined) => setCodeContent(val || "")}
+              options={{
+                minimap: { enabled: false },
+                fontSize: 15,
+                scrollBeyondLastLine: false,
+                wordWrap: "on",
+                lineNumbers: "off",
+                scrollbar: { vertical: "hidden", horizontal: "hidden" },
+                overviewRulerLanes: 0,
+                hideCursorInOverviewRuler: true,
+                overviewRulerBorder: false,
+                renderLineHighlight: "none",
+                folding: false,
+                contextmenu: false,
+                quickSuggestions: false,
+                suggestOnTriggerCharacters: false,
+                tabSize: 2,
+                padding: { top: 8, bottom: 8 },
+                theme: "vs-dark",
+              }}
+              className="rounded-lg border border-[#22304a] bg-[#171b24] text-[#e0e7ef]"
+            />
+          </div>
+          <div className="w-full flex flex-row items-center gap-2 mt-2">
+            <label className="cursor-pointer bg-[#22304a] text-[#60a5fa] px-3 py-2 rounded-lg shadow border border-[#22304a] hover:bg-[#2563eb]/20 transition">
+              <input
+                type="file"
+                multiple
+                hidden
+                onChange={handleFileChange}
+                accept="image/*,video/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt"
+                disabled={uploading}
+              />
+              {uploading
+                ? uploadPercent !== null
+                  ? `${uploadPercent}%`
+                  : "Uploading..."
+                : <Paperclip />}
+            </label>
+            <button
+              className={`px-3 py-2 rounded-lg shadow border ${codeMode ? "bg-blue-700 text-white" : "bg-[#22304a] text-[#60a5fa]"} hover:bg-blue-800 transition`}
+              onClick={() => setCodeMode((prev) => !prev)}
+              type="button"
+              disabled={uploading}
+            >
+              {codeMode ? "Text" : "Code"}
+            </button>
             <select
-              className="rounded-l-lg px-2 py-2 bg-[#171b24] text-[#e0e7ef] border border-[#22304a] focus:outline-none focus:ring-1 focus:ring-[#2563eb] transition"
+              className="rounded-lg px-2 py-2 bg-[#171b24] text-[#e0e7ef] border border-[#22304a] focus:outline-none focus:ring-1 focus:ring-[#2563eb] transition"
               value={codeLanguage}
               onChange={(e) => setCodeLanguage(e.target.value)}
               style={{ minWidth: 100 }}
@@ -818,71 +864,67 @@ export default function UserChatRoom({ selectedUser, onUpdateLastMessage }: User
               <option value="sql">SQL</option>
               <option value="plaintext">Plain Text</option>
             </select>
-            <div className="flex-1 min-w-0">
-              <MonacoEditor
-                height="80px"
-                language={codeLanguage}
-                value={codeContent}
-                onChange={(val: string | undefined) => setCodeContent(val || "")}
-                options={{
-                  minimap: { enabled: false },
-                  fontSize: 14,
-                  scrollBeyondLastLine: false,
-                  wordWrap: "on",
-                  lineNumbers: "off",
-                  scrollbar: { vertical: "hidden", horizontal: "hidden" },
-                  overviewRulerLanes: 0,
-                  hideCursorInOverviewRuler: true,
-                  overviewRulerBorder: false,
-                  renderLineHighlight: "none",
-                  folding: false,
-                  contextmenu: false,
-                  quickSuggestions: false,
-                  suggestOnTriggerCharacters: false,
-                  tabSize: 2,
-                  padding: { top: 8, bottom: 8 },
-                }}
-                className="rounded-r-lg border border-[#22304a] bg-[#171b24] text-[#e0e7ef]"
-              />
-            </div>
             <button
-              className="bg-[#2563eb] hover:bg-[#1d4ed8] text-white px-6 py-2 rounded-r-lg shadow transition"
+              className="bg-[#2563eb] hover:bg-[#1d4ed8] text-white px-6 py-2 rounded-lg shadow transition"
               onClick={handleSendMessage}
               disabled={uploading || !codeContent.trim()}
               type="button"
             >
               Send
             </button>
-          </>
-        ) : (
-          <>
+          </div>
+        </div>
+      ) : (
+        <div className="flex mt-2 px-4 pb-4 items-center gap-2 rounded-2xl shadow-lg bg-[#181a20] border border-[#22304a] transition-all duration-300">
+          <label className="cursor-pointer bg-[#22304a] text-[#60a5fa] px-3 py-2 rounded-lg shadow border border-[#22304a] hover:bg-[#2563eb]/20 transition">
             <input
-              className="flex-1 rounded-l-lg px-3 py-2 bg-[#171b24] text-[#e0e7ef] placeholder:text-[#64748b] border border-[#22304a] focus:outline-none focus:ring-1 focus:ring-[#2563eb] transition"
-              value={newMessage}
-              onChange={(e) => {
-                setNewMessage(e.target.value);
-                if (socketRef.current && selectedUser && session?.user?.id) {
-                  socketRef.current.emit("typing", {
-                    roomId: getRoomId(session.user.id, selectedUser._id),
-                    userId: session.user.id,
-                  });
-                }
-              }}
-              onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
-              placeholder="Type your message..."
+              type="file"
+              multiple
+              hidden
+              onChange={handleFileChange}
+              accept="image/*,video/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt"
               disabled={uploading}
             />
-            <button
-              className="bg-[#2563eb] hover:bg-[#1d4ed8] text-white px-6 py-2 rounded-r-lg shadow transition"
-              onClick={handleSendMessage}
-              disabled={uploading}
-              type="button"
-            >
-              Send
-            </button>
-          </>
-        )}
-      </div>
+            {uploading
+              ? uploadPercent !== null
+                ? `${uploadPercent}%`
+                : "Uploading..."
+              : <Paperclip />}
+          </label>
+          <button
+            className={`px-3 py-2 rounded-lg shadow border ${codeMode ? "bg-blue-700 text-white" : "bg-[#22304a] text-[#60a5fa]"} hover:bg-blue-800 transition`}
+            onClick={() => setCodeMode((prev) => !prev)}
+            type="button"
+            disabled={uploading}
+          >
+            {codeMode ? "Text" : "Code"}
+          </button>
+          <input
+            className="flex-1 rounded-l-lg px-3 py-2 bg-[#171b24] text-[#e0e7ef] placeholder:text-[#64748b] border border-[#22304a] focus:outline-none focus:ring-1 focus:ring-[#2563eb] transition"
+            value={newMessage}
+            onChange={(e) => {
+              setNewMessage(e.target.value);
+              if (socketRef.current && selectedUser && session?.user?.id) {
+                socketRef.current.emit("typing", {
+                  roomId: getRoomId(session.user.id, selectedUser._id),
+                  userId: session.user.id,
+                });
+              }
+            }}
+            onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
+            placeholder="Type your message..."
+            disabled={uploading}
+          />
+          <button
+            className="bg-[#2563eb] hover:bg-[#1d4ed8] text-white px-6 py-2 rounded-r-lg shadow transition"
+            onClick={handleSendMessage}
+            disabled={uploading}
+            type="button"
+          >
+            Send
+          </button>
+        </div>
+      )}
       {/* Modal for media preview */}
       {modalMedia && (
         <div
