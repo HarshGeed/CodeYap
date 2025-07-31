@@ -15,9 +15,6 @@ interface ChatInputBarProps {
   uploadPercent: number | null;
   handleFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   handleSendMessage: () => void;
-  session: any;
-  selectedUser: any;
-  socketRef: React.MutableRefObject<any>;
 }
 
 const ChatInputBar: React.FC<ChatInputBarProps> = React.memo(({
@@ -33,9 +30,6 @@ const ChatInputBar: React.FC<ChatInputBarProps> = React.memo(({
   uploadPercent,
   handleFileChange,
   handleSendMessage,
-  session,
-  selectedUser,
-  socketRef,
 }) => {
   // Local state for message input
   const [internalValue, setInternalValue] = useState(newMessage);
@@ -131,7 +125,7 @@ const ChatInputBar: React.FC<ChatInputBarProps> = React.memo(({
       </div>
     </div>
   ) : (
-    <div className="flex mt-2 px-4 pb-4 items-center gap-2 rounded-2xl shadow-lg bg-[#181a20] border border-[#22304a] transition-all duration-300">
+    <div className="flex mt-2 pb-2 items-center gap-2 rounded-2xl shadow-lg transition-all duration-300">
       <label className="cursor-pointer bg-[#22304a] text-[#60a5fa] px-3 py-2 rounded-lg shadow border border-[#22304a] hover:bg-[#2563eb]/20 transition">
         <input
           type="file"
@@ -178,5 +172,7 @@ const ChatInputBar: React.FC<ChatInputBarProps> = React.memo(({
     </div>
   );
 });
+
+ChatInputBar.displayName = "ChatInputBar";
 
 export default ChatInputBar; 

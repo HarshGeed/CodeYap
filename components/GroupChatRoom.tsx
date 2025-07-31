@@ -5,6 +5,7 @@ import default_pfp from "@/public/default_pfp.jpg";
 import { useSession } from "next-auth/react";
 import { Paperclip } from "lucide-react";
 import { connectSocket } from "@/lib/socket";
+import { CodeEditor, CodeHighlighter } from "./CodeEditor";
 
 interface GroupChatRoomProps {
   group: {
@@ -23,6 +24,11 @@ interface GroupMessage {
   message: string;
   timestamp: string;
   fileType?: string;
+  contentType?: string;
+  code?: {
+    language: string;
+    content: string;
+  };
 }
 
 export default function GroupChatRoom({ group }: GroupChatRoomProps) {
@@ -39,6 +45,9 @@ export default function GroupChatRoom({ group }: GroupChatRoomProps) {
   const [modalLoading, setModalLoading] = useState(true);
   const [uploadPercent, setUploadPercent] = useState<number | null>(null);
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
+  const [codeMode, setCodeMode] = useState(false);
+  const [codeContent, setCodeContent] = useState("");
+  const [codeLanguage, setCodeLanguage] = useState("javascript");
 
   function fileTypeFromUrl(url: string) {
     if (url.match(/\.(jpg|jpeg|png|gif|webp)$/i)) return "image";
@@ -220,8 +229,32 @@ export default function GroupChatRoom({ group }: GroupChatRoomProps) {
   }, [group?._id, session?.user?.id]);
 
   const handleSendMessage = async () => {
+    if (codeMode) {
+      if (!codeContent.trim()) return;
+      const msgObj: GroupMessage = {
+        groupId: group._id,
+        senderId: session?.user?.id,
+        senderName: session?.user?.username,
+        senderImage: session?.user?.profileImage,
+        message: "", // Not used for code
+        timestamp: new Date().toISOString(),
+        contentType: "code",
+        code: {
+          language: codeLanguage,
+          content: codeContent,
+        },
+      };
+      socketRef.current.emit("send-group-message", msgObj);
+      await fetch("/api/group-messages/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(msgObj),
+      });
+      setCodeContent("");
+      setCodeMode(false);
+      return;
+    }
     if (!newMessage.trim()) return;
-
     const msgObj: GroupMessage = {
       groupId: group._id,
       senderId: session?.user?.id,
@@ -230,15 +263,12 @@ export default function GroupChatRoom({ group }: GroupChatRoomProps) {
       message: newMessage,
       timestamp: new Date().toISOString(),
     };
-
     socketRef.current.emit("send-group-message", msgObj);
-
     await fetch("/api/group-messages/send", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(msgObj),
     });
-
     setNewMessage("");
   };
 
@@ -331,22 +361,54 @@ export default function GroupChatRoom({ group }: GroupChatRoomProps) {
                             </span>
                           )}
                           {/* Render file or text */}
-                          {type === "image" ? (
-                            <div
-                              className="cursor-pointer"
-                              onClick={() => {
-                                setModalLoading(true);
-                                setModalMedia({
-                                  type: "image",
-                                  src: msg.message,
-                                });
-                              }}
-                            >
-                              <Image
+                          {msg.contentType === "code" && msg.code ? (
+                            <div className="max-w-[32rem]">
+                              <CodeHighlighter code={msg.code.content} language={msg.code.language} />
+                            </div>
+                          ) : (
+                            type === "image" ? (
+                              <div
+                                className="cursor-pointer"
+                                onClick={() => {
+                                  setModalLoading(true);
+                                  setModalMedia({
+                                    type: "image",
+                                    src: msg.message,
+                                  });
+                                }}
+                              >
+                                <Image
+                                  src={msg.message}
+                                  alt="uploaded"
+                                  width={320}
+                                  height={240}
+                                  onLoad={() => {
+                                    setTimeout(() => {
+                                      requestAnimationFrame(() => {
+                                        bottomRef.current?.scrollIntoView({
+                                          behavior: "smooth",
+                                        });
+                                      });
+                                    }, 100);
+                                  }}
+                                  style={{
+                                    objectFit: "contain",
+                                    borderRadius: "0.5rem",
+                                    maxWidth: "20rem",
+                                    maxHeight: "15rem",
+                                    width: "100%",
+                                    height: "auto",
+                                  }}
+                                  className="rounded-lg"
+                                />
+                              </div>
+                            ) : type === "video" ? (
+                              <video
                                 src={msg.message}
-                                alt="uploaded"
-                                width={320}
-                                height={240}
+                                controls
+                                className="max-w-md max-h-[22rem] rounded-lg"
+                                width={400}
+                                height={320}
                                 onLoad={() => {
                                   setTimeout(() => {
                                     requestAnimationFrame(() => {
@@ -356,45 +418,19 @@ export default function GroupChatRoom({ group }: GroupChatRoomProps) {
                                     });
                                   }, 100);
                                 }}
-                                style={{
-                                  objectFit: "contain",
-                                  borderRadius: "0.5rem",
-                                  maxWidth: "20rem",
-                                  maxHeight: "15rem",
-                                  width: "100%",
-                                  height: "auto",
-                                }}
-                                className="rounded-lg"
                               />
-                            </div>
-                          ) : type === "video" ? (
-                            <video
-                              src={msg.message}
-                              controls
-                              className="max-w-md max-h-[22rem] rounded-lg"
-                              width={400}
-                              height={320}
-                              onLoad={() => {
-                                setTimeout(() => {
-                                  requestAnimationFrame(() => {
-                                    bottomRef.current?.scrollIntoView({
-                                      behavior: "smooth",
-                                    });
-                                  });
-                                }, 100);
-                              }}
-                            />
-                          ) : type === "document" ? (
-                            <a
-                              href={msg.message}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="underline text-blue-400"
-                            >
-                              📄 Document
-                            </a>
-                          ) : (
-                            msg.message
+                            ) : type === "document" ? (
+                              <a
+                                href={msg.message}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="underline text-blue-400"
+                              >
+                                📄 Document
+                              </a>
+                            ) : (
+                              msg.message
+                            )
                           )}
                           <span className="inline-block text-[11px] text-[#93c5fd] mt-1 text-right pl-2">
                             {formatTime(msg.timestamp)}
@@ -412,48 +448,128 @@ export default function GroupChatRoom({ group }: GroupChatRoomProps) {
       </div>
 
       {/* Input */}
-      <div className="flex mt-2 px-4 pb-4 items-center gap-2">
-        {/* File upload button */}
-        <label className="cursor-pointer bg-[#22304a] text-[#60a5fa] px-3 py-2 rounded-lg shadow border border-[#22304a] hover:bg-[#2563eb]/20 transition">
-          <input
-            type="file"
-            multiple
-            hidden
-            onChange={handleFileChange}
-            accept="image/*,video/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt"
-            disabled={uploading}
-          />
-          {uploading
-    ? uploadPercent !== null
-      ? `${uploadPercent}%`
-      : "Uploading..."
-    : <Paperclip />}
-        </label>
-        {/* Text input and send button */}
-        <input
-          className="flex-1 rounded-l-lg px-3 py-2 bg-[#171b24] text-[#e0e7ef] placeholder:text-[#64748b] border border-[#22304a] focus:outline-none focus:ring-1 focus:ring-[#2563eb] transition"
-          value={newMessage}
-          onChange={(e) => {
-            setNewMessage(e.target.value);
-            if (socketRef.current && group && session?.user?.id && session?.user?.username) {
-              socketRef.current.emit("group-typing", {
-                groupId: group._id,
-                userId: session.user.id,
-                username: session.user.username,
-              });
-            }
-          }}
-          onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
-          placeholder="Type your message..."
-          disabled={uploading}
-        />
-        <button
-          className="bg-[#2563eb] hover:bg-[#1d4ed8] text-white px-6 py-2 rounded-r-lg shadow transition"
-          onClick={handleSendMessage}
-          disabled={uploading}
-        >
-          Send
-        </button>
+      <div className="flex flex-col w-full mt-2 px-4 pb-4">
+        {codeMode ? (
+          <div className="w-full flex flex-col items-start rounded-2xl shadow-lg bg-[#181a20] border border-[#22304a] transition-all duration-300 mb-2">
+            <div className="w-full">
+              <CodeEditor
+                height="260px"
+                language={codeLanguage}
+                code={codeContent}
+                onChange={setCodeContent}
+                readOnly={false}
+                className="rounded-lg border border-[#22304a] bg-[#171b24] text-[#e0e7ef]"
+              />
+            </div>
+            <div className="w-full flex flex-row items-center gap-2 mt-2">
+              <label className="cursor-pointer bg-[#22304a] text-[#60a5fa] px-3 py-2 rounded-lg shadow border border-[#22304a] hover:bg-[#2563eb]/20 transition">
+                <input
+                  type="file"
+                  multiple
+                  hidden
+                  onChange={handleFileChange}
+                  accept="image/*,video/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt"
+                  disabled={uploading}
+                />
+                {uploading
+                  ? uploadPercent !== null
+                    ? `${uploadPercent}%`
+                    : "Uploading..."
+                  : <Paperclip />}
+              </label>
+              <button
+                className={`px-3 py-2 rounded-lg shadow border ${codeMode ? "bg-blue-700 text-white" : "bg-[#22304a] text-[#60a5fa]"} hover:bg-blue-800 transition`}
+                onClick={() => setCodeMode(false)}
+                type="button"
+                disabled={uploading}
+              >
+                Text
+              </button>
+              <select
+                className="rounded-lg px-2 py-2 bg-[#171b24] text-[#e0e7ef] border border-[#22304a] focus:outline-none focus:ring-1 focus:ring-[#2563eb] transition"
+                value={codeLanguage}
+                onChange={(e) => setCodeLanguage(e.target.value)}
+                style={{ minWidth: 100 }}
+              >
+                <option value="javascript">JavaScript</option>
+                <option value="python">Python</option>
+                <option value="java">Java</option>
+                <option value="c">C</option>
+                <option value="cpp">C++</option>
+                <option value="typescript">TypeScript</option>
+                <option value="go">Go</option>
+                <option value="php">PHP</option>
+                <option value="ruby">Ruby</option>
+                <option value="rust">Rust</option>
+                <option value="kotlin">Kotlin</option>
+                <option value="swift">Swift</option>
+                <option value="csharp">C#</option>
+                <option value="shell">Shell</option>
+                <option value="sql">SQL</option>
+                <option value="plaintext">Plain Text</option>
+              </select>
+              <button
+                className="bg-[#2563eb] hover:bg-[#1d4ed8] text-white px-6 py-2 rounded-lg shadow transition"
+                onClick={handleSendMessage}
+                disabled={uploading || !codeContent.trim()}
+                type="button"
+              >
+                Send
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 rounded-2xl shadow-lg transition-all duration-300">
+            <label className="cursor-pointer bg-[#22304a] text-[#60a5fa] px-3 py-2 rounded-lg shadow border border-[#22304a] hover:bg-[#2563eb]/20 transition">
+              <input
+                type="file"
+                multiple
+                hidden
+                onChange={handleFileChange}
+                accept="image/*,video/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt"
+                disabled={uploading}
+              />
+              {uploading
+                ? uploadPercent !== null
+                  ? `${uploadPercent}%`
+                  : "Uploading..."
+                : <Paperclip />}
+            </label>
+            <button
+              className={`px-3 py-2 rounded-lg shadow border ${codeMode ? "bg-blue-700 text-white" : "bg-[#22304a] text-[#60a5fa]"} hover:bg-blue-800 transition`}
+              onClick={() => setCodeMode(true)}
+              type="button"
+              disabled={uploading}
+            >
+              Code
+            </button>
+            <input
+              className="flex-1 rounded-l-lg px-3 py-2 bg-[#171b24] text-[#e0e7ef] placeholder:text-[#64748b] border border-[#22304a] focus:outline-none focus:ring-1 focus:ring-[#2563eb] transition"
+              value={newMessage}
+              onChange={(e) => {
+                setNewMessage(e.target.value);
+                if (socketRef.current && group && session?.user?.id && session?.user?.username) {
+                  socketRef.current.emit("group-typing", {
+                    groupId: group._id,
+                    userId: session.user.id,
+                    username: session.user.username,
+                  });
+                }
+              }}
+              onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
+              placeholder="Type your message..."
+              disabled={uploading}
+            />
+            <button
+              className="bg-[#2563eb] hover:bg-[#1d4ed8] text-white px-6 py-2 rounded-r-lg shadow transition"
+              onClick={handleSendMessage}
+              disabled={uploading}
+              type="button"
+            >
+              Send
+            </button>
+          </div>
+        )}
       </div>
       {modalMedia && (
         <div
