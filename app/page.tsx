@@ -45,6 +45,64 @@ export default function HomePage() {
   const statusBuffer = useRef<{ userId: string; status: string; lastSeen?: string }[]>([]);
   const [socketConnected, setSocketConnected] = useState(false);
 
+  // Restore chat state after OAuth redirect
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const githubSuccess = urlParams.get('github') === 'success';
+    
+    console.log("HomePage OAuth check:", {
+      githubSuccess,
+      groupsLoaded: groups.length > 0,
+      currentSelectedGroup: selectedGroup?._id
+    });
+    
+    if (githubSuccess) {
+      // Clean up the URL first
+      const newUrl = new URL(window.location.href);
+      newUrl.searchParams.delete('github');
+      window.history.replaceState({}, '', newUrl.toString());
+      
+      // Restore selected group if it was stored
+      const storedGroupId = sessionStorage.getItem("github_oauth_group_id");
+      console.log("Stored group ID:", storedGroupId);
+      
+      if (storedGroupId) {
+        // If groups are already loaded, restore immediately
+        if (groups.length > 0) {
+          const groupToRestore = groups.find(g => g._id === storedGroupId);
+          console.log("Found group to restore:", groupToRestore);
+          if (groupToRestore) {
+            setSelectedGroup(groupToRestore);
+            setSelectedUser(null);
+            // Clean up stored data
+            sessionStorage.removeItem("github_oauth_group_id");
+            console.log("Group restored successfully");
+          }
+        } else {
+          console.log("Groups not loaded yet, will restore when loaded");
+          // If groups aren't loaded yet, we'll restore when they load
+          // The stored ID will be checked in the groups loading effect
+        }
+      }
+    }
+  }, []); // Run only once on mount
+
+  // Additional effect to restore group when groups are loaded
+  useEffect(() => {
+    const storedGroupId = sessionStorage.getItem("github_oauth_group_id");
+    if (storedGroupId && groups.length > 0) {
+      console.log("Restoring group after groups loaded:", storedGroupId);
+      const groupToRestore = groups.find(g => g._id === storedGroupId);
+      if (groupToRestore) {
+        setSelectedGroup(groupToRestore);
+        setSelectedUser(null);
+        // Clean up stored data
+        sessionStorage.removeItem("github_oauth_group_id");
+        console.log("Group restored after groups loaded");
+      }
+    }
+  }, [groups]);
+
   const handleGroupClick = (group: Group) => {
     setSelectedUser(null); // Deselect individual user
     setSelectedGroup(group);

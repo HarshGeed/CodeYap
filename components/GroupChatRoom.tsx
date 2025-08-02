@@ -6,6 +6,8 @@ import { useSession } from "next-auth/react";
 import { Paperclip } from "lucide-react";
 import { connectSocket } from "@/lib/socket";
 import { CodeEditor, CodeHighlighter } from "./CodeEditor";
+import { Github } from "lucide-react";
+import GithubShareModal from "./GithubShareModal";
 
 interface GroupChatRoomProps {
   group: {
@@ -48,6 +50,46 @@ export default function GroupChatRoom({ group }: GroupChatRoomProps) {
   const [codeMode, setCodeMode] = useState(false);
   const [codeContent, setCodeContent] = useState("");
   const [codeLanguage, setCodeLanguage] = useState("javascript");
+  const [githubModalOpen, setGithubModalOpen] = useState(false);
+
+  // Debug modal state changes
+  useEffect(() => {
+    console.log("GitHub modal state changed:", githubModalOpen);
+  }, [githubModalOpen]);
+
+  // Check for GitHub OAuth success on component mount
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const githubSuccess = urlParams.get('github') === 'success';
+    
+    console.log("GroupChatRoom OAuth check:", {
+      githubSuccess,
+      url: window.location.href,
+    });
+    
+    if (githubSuccess) {
+      console.log("OAuth success detected, checking for valid GitHub token");
+      
+      // Clean up the URL first
+      const newUrl = new URL(window.location.href);
+      newUrl.searchParams.delete('github');
+      window.history.replaceState({}, '', newUrl.toString());
+      
+      // Check if we have a valid GitHub token by making an API request
+      fetch("/api/github/repos")
+        .then(response => {
+          if (response.ok) {
+            console.log("Valid GitHub token found, opening modal");
+            setGithubModalOpen(true);
+          } else {
+            console.log("No valid GitHub token found after OAuth");
+          }
+        })
+        .catch(error => {
+          console.error("Error checking GitHub token after OAuth:", error);
+        });
+    }
+  }, []);
 
   function fileTypeFromUrl(url: string) {
     if (url.match(/\.(jpg|jpeg|png|gif|webp)$/i)) return "image";
@@ -272,10 +314,42 @@ export default function GroupChatRoom({ group }: GroupChatRoomProps) {
     setNewMessage("");
   };
 
+  // GitHub Share handler
+  const handleGithubShare = async () => {
+    console.log("GitHub Share button clicked");
+    try {
+      // Check if user has a valid GitHub token by making a request to repos endpoint
+      console.log("Making request to /api/github/repos to check authentication");
+      const response = await fetch("/api/github/repos");
+      
+      console.log("GitHub repos response status:", response.status);
+      
+      if (response.ok) {
+        // User has a valid token, open the modal
+        console.log("User has valid GitHub token, opening modal");
+        setGithubModalOpen(true);
+      } else if (response.status === 401) {
+        // User is not authenticated, redirect to GitHub OAuth
+        console.log("User not authenticated, redirecting to OAuth");
+        sessionStorage.setItem("github_oauth_group_id", group._id);
+        const res = await fetch("/api/github/start-oauth");
+        const data = await res.json();
+        window.location.href = data.url;
+      } else {
+        // Other error occurred
+        console.error("Error checking GitHub authentication:", response.status);
+        alert("Error checking GitHub authentication. Please try again.");
+      }
+    } catch (error) {
+      console.error("Error in handleGithubShare:", error);
+      alert("Error connecting to GitHub. Please try again.");
+    }
+  };
+
   return (
     <div className="flex flex-col h-full">
       {/* Group Header */}
-      <div className="flex items-center gap-4 px-4 pt-4 pb-2 border-b border-[#22304a]/30">
+      <div className="flex items-center gap-4 px-4 pt-4 pb-2 border-b border-[#22304a]/30 relative">
         <div className="h-12 w-12 bg-[#22304a] rounded-full flex items-center justify-center text-[#60a5fa] font-bold text-2xl">
           {group.name[0]}
         </div>
@@ -290,6 +364,26 @@ export default function GroupChatRoom({ group }: GroupChatRoomProps) {
             )}
           </div>
         </div>
+        {/* GitHub Share Button */}
+        <button
+          className="absolute right-4 top-4 flex items-center gap-2 bg-[#181a20] border border-[#22304a] text-[#e0e7ef] hover:bg-[#222c3a] px-3 py-2 rounded-lg shadow transition z-10"
+          onClick={handleGithubShare}
+          type="button"
+          title="Share code from GitHub"
+        >
+          <Github size={20} />
+          <span className="hidden sm:inline">Share from GitHub</span>
+        </button>
+        <GithubShareModal
+          open={githubModalOpen}
+          onClose={() => setGithubModalOpen(false)}
+          onShare={({ code, language }) => {
+            setCodeContent(code);
+            setCodeLanguage(language);
+            setCodeMode(true);
+            setGithubModalOpen(false);
+          }}
+        />
       </div>
 
       {/* Messages */}
