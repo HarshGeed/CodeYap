@@ -64,7 +64,9 @@ export default function HomePage() {
       
       // Restore selected group if it was stored
       const storedGroupId = sessionStorage.getItem("github_oauth_group_id");
+      const storedUserId = sessionStorage.getItem("github_oauth_user_id");
       console.log("Stored group ID:", storedGroupId);
+      console.log("Stored user ID:", storedUserId);
       
       if (storedGroupId) {
         // If groups are already loaded, restore immediately
@@ -82,6 +84,22 @@ export default function HomePage() {
           console.log("Groups not loaded yet, will restore when loaded");
           // If groups aren't loaded yet, we'll restore when they load
           // The stored ID will be checked in the groups loading effect
+        }
+      } else if (storedUserId) {
+        // If users are already loaded, restore immediately
+        if (connectedUsers.length > 0) {
+          const userToRestore = connectedUsers.find(u => u._id === storedUserId);
+          console.log("Found user to restore:", userToRestore);
+          if (userToRestore) {
+            setSelectedUser(userToRestore);
+            setSelectedGroup(null);
+            // Clean up stored data
+            sessionStorage.removeItem("github_oauth_user_id");
+            console.log("User restored successfully");
+          }
+        } else {
+          console.log("Users not loaded yet, will restore when loaded");
+          // If users aren't loaded yet, we'll restore when they load
         }
       }
     }
@@ -102,6 +120,22 @@ export default function HomePage() {
       }
     }
   }, [groups]);
+
+  // Additional effect to restore user when connected users are loaded
+  useEffect(() => {
+    const storedUserId = sessionStorage.getItem("github_oauth_user_id");
+    if (storedUserId && connectedUsers.length > 0) {
+      console.log("Restoring user after users loaded:", storedUserId);
+      const userToRestore = connectedUsers.find(u => u._id === storedUserId);
+      if (userToRestore) {
+        setSelectedUser(userToRestore);
+        setSelectedGroup(null);
+        // Clean up stored data
+        sessionStorage.removeItem("github_oauth_user_id");
+        console.log("User restored after users loaded");
+      }
+    }
+  }, [connectedUsers]);
 
   const handleGroupClick = (group: Group) => {
     setSelectedUser(null); // Deselect individual user

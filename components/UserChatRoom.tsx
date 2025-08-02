@@ -6,6 +6,8 @@ import { connectSocket, registerUser } from "@/lib/socket";
 import Link from "next/link";
 import MessageList from "./MessageList";
 import ChatInputBar from "./ChatInputBar";
+import { Github } from "lucide-react";
+import GithubShareModal from "./GithubShareModal";
 
 interface User {
   _id: string;
@@ -59,6 +61,41 @@ export default function UserChatRoom({ selectedUser, onUpdateLastMessage }: User
   const [codeMode, setCodeMode] = useState(false);
   const [codeContent, setCodeContent] = useState("");
   const [codeLanguage, setCodeLanguage] = useState("javascript");
+  const [githubModalOpen, setGithubModalOpen] = useState(false);
+
+  // Check for GitHub OAuth success on component mount
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const githubSuccess = urlParams.get('github') === 'success';
+    
+    console.log("UserChatRoom OAuth check:", {
+      githubSuccess,
+      url: window.location.href,
+    });
+    
+    if (githubSuccess) {
+      console.log("OAuth success detected, checking for valid GitHub token");
+      
+      // Clean up the URL first
+      const newUrl = new URL(window.location.href);
+      newUrl.searchParams.delete('github');
+      window.history.replaceState({}, '', newUrl.toString());
+      
+      // Check if we have a valid GitHub token by making an API request
+      fetch("/api/github/repos")
+        .then(response => {
+          if (response.ok) {
+            console.log("Valid GitHub token found, opening modal");
+            setGithubModalOpen(true);
+          } else {
+            console.log("No valid GitHub token found after OAuth");
+          }
+        })
+        .catch(error => {
+          console.error("Error checking GitHub token after OAuth:", error);
+        });
+    }
+  }, []);
 
   // Local state for user status and lastSeen
   const [userStatus, setUserStatus] = useState<{ status: string; lastSeen?: string }>({
@@ -489,6 +526,38 @@ export default function UserChatRoom({ selectedUser, onUpdateLastMessage }: User
     onUpdateLastMessage(selectedUser._id, newMessage);
   };
 
+  // GitHub Share handler
+  const handleGithubShare = async () => {
+    console.log("GitHub Share button clicked");
+    try {
+      // Check if user has a valid GitHub token by making a request to repos endpoint
+      console.log("Making request to /api/github/repos to check authentication");
+      const response = await fetch("/api/github/repos");
+      
+      console.log("GitHub repos response status:", response.status);
+      
+      if (response.ok) {
+        // User has a valid token, open the modal
+        console.log("User has valid GitHub token, opening modal");
+        setGithubModalOpen(true);
+      } else if (response.status === 401) {
+        // User is not authenticated, redirect to GitHub OAuth
+        console.log("User not authenticated, redirecting to OAuth");
+        sessionStorage.setItem("github_oauth_user_id", selectedUser._id);
+        const res = await fetch("/api/github/start-oauth");
+        const data = await res.json();
+        window.location.href = data.url;
+      } else {
+        // Other error occurred
+        console.error("Error checking GitHub authentication:", response.status);
+        alert("Error checking GitHub authentication. Please try again.");
+      }
+    } catch (error) {
+      console.error("Error in handleGithubShare:", error);
+      alert("Error connecting to GitHub. Please try again.");
+    }
+  };
+
   // Handle file upload and send as message
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -610,7 +679,7 @@ export default function UserChatRoom({ selectedUser, onUpdateLastMessage }: User
   return (
     <div className="flex flex-col h-full">
       {/* Header with profile image, username, and status */}
-      <div className="flex items-center gap-3 px-4 pt-4 pb-2">
+      <div className="flex items-center gap-3 px-4 pt-4 pb-2 border-b border-[#22304a]/30 relative">
         <Image
           src={selectedUser.profileImage || "/default_pfp.jpg"}
           alt={selectedUser.username}
@@ -634,6 +703,26 @@ export default function UserChatRoom({ selectedUser, onUpdateLastMessage }: User
               : "Offline"}
           </span>
         </div>
+        {/* GitHub Share Button */}
+        <button
+          className="absolute right-4 top-4 flex items-center gap-2 bg-[#181a20] border border-[#22304a] text-[#e0e7ef] hover:bg-[#222c3a] px-3 py-2 rounded-lg shadow transition z-10"
+          onClick={handleGithubShare}
+          type="button"
+          title="Share code from GitHub"
+        >
+          <Github size={20} />
+          <span className="hidden sm:inline">Share from GitHub</span>
+        </button>
+        <GithubShareModal
+          open={githubModalOpen}
+          onClose={() => setGithubModalOpen(false)}
+          onShare={({ code, language }) => {
+            setCodeContent(code);
+            setCodeLanguage(language);
+            setCodeMode(true);
+            setGithubModalOpen(false);
+          }}
+        />
       </div>
       {/* Chat messages */}
       <MessageList

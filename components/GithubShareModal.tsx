@@ -115,10 +115,43 @@ const GithubShareModal: React.FC<GithubShareModalProps> = ({ open, onClose, onSh
 
   // Line selection logic
   const handleLineClick = (line: number, e: React.MouseEvent) => {
-    if (!selectedLines || !e.shiftKey) {
-      setSelectedLines([line, line]);
+    if (e.shiftKey && selectedLines) {
+      // Extend selection with Shift+click
+      const start = Math.min(selectedLines[0], line);
+      const end = Math.max(selectedLines[1], line);
+      setSelectedLines([start, end]);
+    } else if (e.ctrlKey || e.metaKey) {
+      // Toggle line with Ctrl/Cmd+click (for individual line selection)
+      if (selectedLines && selectedLines[0] === line && selectedLines[1] === line) {
+        setSelectedLines(null); // Deselect if clicking the same line
+      } else {
+        setSelectedLines([line, line]);
+      }
     } else {
-      setSelectedLines([Math.min(selectedLines[0], line), Math.max(selectedLines[0], line)]);
+      // Normal click - start new selection
+      setSelectedLines([line, line]);
+    }
+  };
+
+  // Select all lines
+  const handleSelectAll = () => {
+    if (fileContent) {
+      const totalLines = fileContent.split("\n").length;
+      setSelectedLines([1, totalLines]);
+    }
+  };
+
+  // Clear selection
+  const handleClearSelection = () => {
+    setSelectedLines(null);
+  };
+
+  // Select first N lines
+  const handleSelectFirst = (n: number) => {
+    if (fileContent) {
+      const totalLines = fileContent.split("\n").length;
+      const endLine = Math.min(n, totalLines);
+      setSelectedLines([1, endLine]);
     }
   };
 
@@ -153,45 +186,106 @@ const GithubShareModal: React.FC<GithubShareModalProps> = ({ open, onClose, onSh
             ) : fileError ? (
               <div className="text-red-400 text-center py-8">{fileError}</div>
             ) : fileContent ? (
-              <div className="border border-[#22304a] rounded-lg bg-[#171b24] overflow-x-auto max-h-96 mb-4">
-                <pre className="text-xs text-[#e0e7ef] font-mono p-2">
-                  {fileContent.split("\n").map((line, idx) => {
-                    const lineNum = idx + 1;
-                    const isSelected = selectedLines && lineNum >= selectedLines[0] && lineNum <= selectedLines[1];
-                    return (
-                      <div
-                        key={lineNum}
-                        className={`flex cursor-pointer ${isSelected ? "bg-[#2563eb]/30" : ""}`}
-                        onClick={(e) => handleLineClick(lineNum, e)}
-                      >
-                        <span className="w-10 text-right pr-2 select-none text-[#60a5fa]">{lineNum}</span>
-                        <span className="whitespace-pre">{line}</span>
-                      </div>
-                    );
-                  })}
-                </pre>
-              </div>
+              <>
+                {/* Selection controls */}
+                <div className="flex flex-wrap items-center gap-2 mb-3">
+                  <button
+                    className="text-xs bg-[#22304a] hover:bg-[#2563eb]/30 text-[#60a5fa] px-2 py-1 rounded transition"
+                    onClick={handleSelectAll}
+                  >
+                    Select All
+                  </button>
+                  <button
+                    className="text-xs bg-[#22304a] hover:bg-[#2563eb]/30 text-[#60a5fa] px-2 py-1 rounded transition"
+                    onClick={() => handleSelectFirst(10)}
+                  >
+                    First 10 Lines
+                  </button>
+                  <button
+                    className="text-xs bg-[#22304a] hover:bg-[#2563eb]/30 text-[#60a5fa] px-2 py-1 rounded transition"
+                    onClick={() => handleSelectFirst(25)}
+                  >
+                    First 25 Lines
+                  </button>
+                  {selectedLines && (
+                    <button
+                      className="text-xs bg-[#22304a] hover:bg-[#2563eb]/30 text-[#60a5fa] px-2 py-1 rounded transition"
+                      onClick={handleClearSelection}
+                    >
+                      Clear Selection
+                    </button>
+                  )}
+                  {selectedLines && (
+                    <span className="text-xs text-[#a0aec0]">
+                      {selectedLines[0] === selectedLines[1] 
+                        ? `Line ${selectedLines[0]} selected`
+                        : `Lines ${selectedLines[0]}-${selectedLines[1]} selected (${selectedLines[1] - selectedLines[0] + 1} lines)`
+                      }
+                    </span>
+                  )}
+                </div>
+                
+                {/* File content with line numbers */}
+                <div className="border border-[#22304a] rounded-lg bg-[#171b24] overflow-x-auto max-h-96 mb-4">
+                  <div className="text-xs text-[#a0aec0] bg-[#22304a]/30 px-3 py-2 border-b border-[#22304a] flex items-center gap-2">
+                    <span>💡</span>
+                    <span><strong>How to select:</strong> Click any line → Shift+click to extend → Ctrl/Cmd+click to toggle individual lines</span>
+                  </div>
+                  <pre className="text-xs text-[#e0e7ef] font-mono p-2">
+                    {fileContent.split("\n").map((line, idx) => {
+                      const lineNum = idx + 1;
+                      const isSelected = selectedLines && lineNum >= selectedLines[0] && lineNum <= selectedLines[1];
+                      return (
+                        <div
+                          key={lineNum}
+                          className={`flex cursor-pointer hover:bg-[#22304a]/50 ${
+                            isSelected ? "bg-[#2563eb]/30" : ""
+                          }`}
+                          onClick={(e) => handleLineClick(lineNum, e)}
+                        >
+                          <span className={`w-12 text-right pr-2 select-none ${
+                            isSelected ? "text-[#60a5fa] font-semibold" : "text-[#60a5fa]/70"
+                          }`}>{lineNum}</span>
+                          <span className="whitespace-pre flex-1">{line}</span>
+                        </div>
+                      );
+                    })}
+                  </pre>
+                </div>
+              </>
             ) : null}
             {fileContent && (
-              <button
-                className="bg-[#2563eb] hover:bg-[#1d4ed8] text-white px-6 py-2 rounded-lg shadow transition"
-                disabled={!selectedLines}
-                onClick={() => {
-                  if (!selectedLines) return;
-                  const [start, end] = selectedLines;
-                  const lines = fileContent.split("\n").slice(start - 1, end).join("\n");
-                  onShare({
-                    repo: selectedRepo.full_name,
-                    file: selectedFile.path,
-                    start,
-                    end,
-                    code: lines,
-                    language: getLanguageFromFilename(selectedFile.path),
-                  });
-                }}
-              >
-                Share {selectedLines ? `lines ${selectedLines[0]}-${selectedLines[1]}` : "..."}
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  className="bg-[#2563eb] hover:bg-[#1d4ed8] text-white px-6 py-2 rounded-lg shadow transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={!selectedLines}
+                  onClick={() => {
+                    if (!selectedLines) return;
+                    const [start, end] = selectedLines;
+                    const lines = fileContent.split("\n").slice(start - 1, end).join("\n");
+                    onShare({
+                      repo: selectedRepo.full_name,
+                      file: selectedFile.path,
+                      start,
+                      end,
+                      code: lines,
+                      language: getLanguageFromFilename(selectedFile.path),
+                    });
+                  }}
+                >
+                  {selectedLines
+                    ? selectedLines[0] === selectedLines[1]
+                      ? `Share Line ${selectedLines[0]}`
+                      : `Share Lines ${selectedLines[0]}-${selectedLines[1]} (${selectedLines[1] - selectedLines[0] + 1} lines)`
+                    : "Select lines to share"
+                  }
+                </button>
+                {!selectedLines && (
+                  <span className="text-xs text-[#a0aec0]">
+                    Select one or more lines first
+                  </span>
+                )}
+              </div>
             )}
           </>
         ) : selectedRepo ? (
