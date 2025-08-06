@@ -20,6 +20,25 @@ interface UserProfile {
   techStacks?: string[];
 }
 
+interface Connection {
+  _id: string;
+  username: string;
+  profileImage?: string;
+}
+
+interface Notification {
+  _id: string;
+  userId: string;
+  message: string;
+  read: boolean;
+  time: string;
+  meta?: {
+    fromUserId: string;
+    fromUsername: string;
+    type: string;
+  };
+}
+
 export default function ProfilePage({
   params,
 }: {
@@ -34,6 +53,7 @@ export default function ProfilePage({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  const [disconnectModalOpen, setDisconnectModalOpen] = useState(false);
   const [requestStatus, setRequestStatus] = useState<
     "none" | "requested" | "connected"
   >("none");
@@ -63,6 +83,30 @@ export default function ProfilePage({
     });
   };
 
+  const handleDisconnect = async () => {
+    try {
+      // Call API to remove connection
+      const res = await fetch("/api/connections/remove", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId1: loggedInUserId,
+          userId2: profileUserId,
+        }),
+      });
+
+      if (res.ok) {
+        setRequestStatus("none");
+        setDisconnectModalOpen(false);
+      } else {
+        alert("Failed to remove connection. Please try again.");
+      }
+    } catch (error) {
+      console.error("Error removing connection:", error);
+      alert("Failed to remove connection. Please try again.");
+    }
+  };
+
   useEffect(() => {
     setLoading(true);
     setError(null);
@@ -82,6 +126,50 @@ export default function ProfilePage({
         setLoading(false);
       });
   }, [profileUserId]);
+
+  // Check connection status between current user and profile user
+  useEffect(() => {
+    if (!loggedInUserId || !profileUserId || isOwnProfile) return;
+    
+    const checkConnectionStatus = async () => {
+      try {
+        // Fetch current user's connections to check if this profile user is connected
+        const res = await fetch(`/api/connections/${loggedInUserId}`);
+        if (res.ok) {
+          const connections: Connection[] = await res.json();
+          const isConnected = connections.some((conn: Connection) => conn._id === profileUserId);
+          
+          if (isConnected) {
+            setRequestStatus("connected");
+          } else {
+            // Check if there's a pending invitation from logged-in user to profile user
+            const notificationRes = await fetch(`/api/notifications/${profileUserId}`);
+            if (notificationRes.ok) {
+              const notifications: Notification[] = await notificationRes.json();
+              const hasPendingRequest = notifications.some((notif: Notification) => 
+                notif.meta?.type === 'invite' && 
+                notif.meta?.fromUserId === loggedInUserId && 
+                !notif.read
+              );
+              
+              if (hasPendingRequest) {
+                setRequestStatus("requested");
+              } else {
+                setRequestStatus("none");
+              }
+            } else {
+              setRequestStatus("none");
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Error checking connection status:", error);
+        setRequestStatus("none");
+      }
+    };
+
+    checkConnectionStatus();
+  }, [loggedInUserId, profileUserId, isOwnProfile]);
 
   if (loading) {
     return <div className="mx-[11rem] mt-10">Loading...</div>;
@@ -128,6 +216,41 @@ export default function ProfilePage({
                   onClose={() => setModalOpen(false)}
                   onSave={handleSave}
                 />
+              </>
+            ) : requestStatus === "connected" ? (
+              <>
+                <button
+                  className="p-2 rounded-xl bg-[#2a6c3e] text-white mt-4 w-full hover:bg-[#234a32] transition-colors"
+                  onClick={() => setDisconnectModalOpen(true)}
+                >
+                  ✓ Connected
+                </button>
+                
+                {/* Disconnect Confirmation Modal */}
+                {disconnectModalOpen && (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60">
+                    <div className="bg-[#1e2024] rounded-xl shadow-lg p-6 w-full max-w-md border border-[#22304a]">
+                      <h2 className="text-xl font-bold text-[#e0e7ef] mb-4">Remove Connection</h2>
+                      <p className="text-[#a0aec0] mb-6">
+                        Are you sure you want to remove <span className="font-semibold text-[#60a5fa]">{user.username}</span> from your connections?
+                      </p>
+                      <div className="flex gap-3">
+                        <button
+                          className="flex-1 px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors"
+                          onClick={() => setDisconnectModalOpen(false)}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
+                          onClick={handleDisconnect}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </>
             ) : requestStatus === "requested" ? (
               <button
