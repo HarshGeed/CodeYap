@@ -10,6 +10,20 @@ interface CustomUser extends NextAuthUser{
   id: string;
   username?: string;
   isOauth?: boolean;
+  profileImage?: string;
+}
+
+declare module "next-auth" {
+  interface Session {
+    user: {
+      id: string;
+      email: string;
+      name: string;
+      username: string;
+      profileImage?: string;
+      emailVerified?: Date | null;
+    };
+  }
 }
 
  const authConfig: NextAuthConfig = {
@@ -40,14 +54,14 @@ interface CustomUser extends NextAuthUser{
 
           if (!user) throw new Error("User not found");
 
-          const isValidPassword = compare(credentials.password as string, user.password as string);
+          const isValidPassword = await compare(credentials.password as string, user.password as string);
 
           if (!isValidPassword) throw new Error("Password is wrong");
 
           // console.log(user);
           return user as CustomUser;
         } catch (error) {
-          console.log("Error =>", error.message);
+          console.log("Error =>", (error as Error).message);
           return null;
         }
       },
@@ -58,10 +72,17 @@ interface CustomUser extends NextAuthUser{
     strategy: "jwt",
     maxAge: 7 * 24 * 60 * 60,
   },
-  // pages: {
-  //   signIn: "/login",
-  // },
+  pages: {
+    signIn: "/login",
+  },
   callbacks: {
+    async redirect({ url, baseUrl }) {
+      // Allows relative callback URLs
+      if (url.startsWith("/")) return `${baseUrl}${url}`;
+      // Allows callback URLs on the same origin
+      else if (new URL(url).origin === baseUrl) return url;
+      return baseUrl;
+    },
     async jwt({ token, user, account }) {
       // connect();
       if (account?.provider === "google") {
@@ -85,7 +106,7 @@ interface CustomUser extends NextAuthUser{
         token.id = user.id;
         token.email = user.email;
         token.name = (user as CustomUser).username;
-        token.profileImage = (user as any).profileImage;
+        token.profileImage = (user as CustomUser).profileImage;
       }
       // console.log("Token after processing:", token);
       return token;

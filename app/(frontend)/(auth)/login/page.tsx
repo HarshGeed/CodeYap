@@ -14,7 +14,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (status === "authenticated") {
-      router.replace("/dashboard");
+      router.replace("/");
     }
   }, [status, router]);
 
@@ -22,21 +22,31 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    
+    console.log("Attempting sign in with:", { email }); // Debug log
+    
     const res = await signIn("credentials", {
       email,
       password,
       redirect: false,
     });
+    
+    console.log("Sign in response:", res); // Debug log
+    
     setLoading(false);
     if (res?.error) {
+      console.error("Sign in error:", res.error); // Debug log
       setError("Invalid email or password.");
+    } else if (res?.ok) {
+      console.log("Sign in successful! Redirecting..."); // Debug log
+      // Manual redirect after successful login
+      router.push("/");
     }
-    // Do NOT redirect here!
   };
 
   const handleGoogleSignIn = async () => {
     setLoading(true);
-    await signIn("google");
+    await signIn("google", { callbackUrl: "/" });
     setLoading(false);
   };
 

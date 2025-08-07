@@ -7,7 +7,7 @@ export async function middleware(req: NextRequest) {
 
   // If user is not authenticated, redirect to sign-in page
   if (!session) {
-    return NextResponse.redirect(new URL("/api/auth/signin", req.url)); // Redirect to actual auth page
+    return NextResponse.redirect(new URL("/login", req.url)); // Redirect to custom login page
   }
 
   return NextResponse.next(); // Allow access if authenticated
@@ -15,7 +15,7 @@ export async function middleware(req: NextRequest) {
 
 export const config = {
   matcher: [
-    // Protect all routes except for API, static, and auth routes
-    "/((?!api|_next/static|_next/image|favicon.ico|auth/signin).*)",
+    // Protect all routes except for API, static, auth routes, login, and signup
+    "/((?!api|_next/static|_next/image|favicon.ico|login|signup).*)",
   ],
 };
