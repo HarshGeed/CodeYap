@@ -16,7 +16,7 @@ interface NotificationModalProps {
   onClose: () => void;
   notifications: Notification[];
   onRemove: (id: string) => void;
-  onMarkAllRead: () => void;
+  onClearAll: () => void;
   onAcceptInvite: (n: Notification) => void;
   onRejectInvite: (n: Notification) => void;
 }
@@ -26,7 +26,7 @@ export default function NotificationModal({
   onClose,
   notifications,
   onRemove,
-  onMarkAllRead,
+  onClearAll,
   onAcceptInvite,
   onRejectInvite,
 }: NotificationModalProps) {
@@ -49,12 +49,12 @@ console.log(notifications);
         </button>
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-2xl font-bold text-white">Notifications</h2>
-          {notifications.some((n) => !n.read) && (
+          {notifications.length > 0 && (
             <button
-              className="text-xs text-blue-400 underline"
-              onClick={onMarkAllRead}
+              className="text-xs text-red-400 underline"
+              onClick={onClearAll}
             >
-              Mark all as read
+              Clear all
             </button>
           )}
         </div>

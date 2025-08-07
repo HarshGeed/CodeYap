@@ -154,10 +154,14 @@ export default function SideBar() {
     setNotifications((prev) => prev.filter((n) => n.id !== id));
   };
 
-  // Mark all as read
-  const handleMarkAllRead = async () => {
-    await fetch(`/api/notifications/markRead/${userId}`, { method: "PATCH" });
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+  // Clear all notifications
+  const handleClearAll = async () => {
+    // Delete all notifications for this user
+    const deletePromises = notifications.map(n => 
+      fetch(`/api/notifications/delete/${n.id}`, { method: "DELETE" })
+    );
+    await Promise.all(deletePromises);
+    setNotifications([]);
     setHasUnread(false);
   };
 
@@ -360,7 +364,7 @@ export default function SideBar() {
         onClose={() => setNotifOpen(false)}
         notifications={notifications}
         onRemove={handleRemove}
-        onMarkAllRead={handleMarkAllRead}
+        onClearAll={handleClearAll}
         onAcceptInvite={handleAcceptInvite}
         onRejectInvite={handleRejectInvite}
       />
