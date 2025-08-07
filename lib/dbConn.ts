@@ -1,25 +1,44 @@
 import mongoose from 'mongoose';
 
-export async function connect(){
-    try{
-        const mongoUri = process.env.MONGO_URI;
-        if (!mongoUri) {
-            throw new Error("MONGO_URI environment variable is not defined.");
-        }
-        mongoose.connect(mongoUri);
-        const connection = mongoose.connection;
+const MONGO_URI = process.env.MONGO_URI!;
 
-        connection.on('connected', () => {
-            console.log("MongoDB connected successfully")
-        })
+if (!MONGO_URI) {
+  throw new Error("MONGO_URI environment variable is not defined.");
+}
 
-        connection.on('error', (err: Error) => {
-            console.log('MongoDB connection error. Please make sure mongoDB is running' + err);
-            process.exit(1);
-        })
-    }catch(error){
-        console.log("Something went wrong")
-        console.log(error)
+export async function connect() {
+  try {
+    // If already connected, return
+    if (mongoose.connection.readyState === 1) {
+      console.log("Using existing MongoDB connection");
+      return mongoose.connection;
     }
 
+    // Connection options
+    const opts = {
+      bufferCommands: false,
+      serverSelectionTimeoutMS: 10000, // 10 seconds
+      socketTimeoutMS: 45000, // 45 seconds
+      maxPoolSize: 10, // Maintain up to 10 socket connections
+      minPoolSize: 2, // Maintain a minimum of 2 socket connections
+    };
+
+    console.log("Creating new MongoDB connection...");
+    await mongoose.connect(MONGO_URI, opts);
+    
+    const connection = mongoose.connection;
+
+    connection.on('connected', () => {
+      console.log("MongoDB connected successfully");
+    });
+
+    connection.on('error', (err: Error) => {
+      console.error('MongoDB connection error:', err);
+    });
+
+    return connection;
+  } catch (error) {
+    console.error("Failed to connect to MongoDB:", error);
+    throw error;
+  }
 }

@@ -84,29 +84,35 @@ declare module "next-auth" {
       return baseUrl;
     },
     async jwt({ token, user, account }) {
-      // connect();
-      if (account?.provider === "google") {
-        // Find user in DB or create new one if not exists
-        let dbUser = await User.findOne({ email: user.email });
+      try {
+        await connect(); // Ensure DB connection
+        
+        if (account?.provider === "google" || account?.provider === "github") {
+          // Find user in DB or create new one if not exists
+          let dbUser = await User.findOne({ email: user.email });
 
-        if (!dbUser) {
-          dbUser = await User.create({
-            username: user.name,
-            email: user.email,
-            isOauth: true,
-            profileImage: user.image,
-          });
+          if (!dbUser) {
+            dbUser = await User.create({
+              username: user.name,
+              email: user.email,
+              isOauth: true,
+              profileImage: user.image,
+            });
+          }
+
+          token.id = dbUser.id;
+          token.email = dbUser.email;
+          token.name = dbUser.username;
+          token.profileImage = dbUser.profileImage;
+        } else if (user) {
+          token.id = user.id;
+          token.email = user.email;
+          token.name = (user as CustomUser).username;
+          token.profileImage = (user as CustomUser).profileImage;
         }
-
-        token.id = dbUser.id;
-        token.email = dbUser.email;
-        token.name = dbUser.username;
-        token.profileImage = dbUser.profileImage;
-      } else if (user) {
-        token.id = user.id;
-        token.email = user.email;
-        token.name = (user as CustomUser).username;
-        token.profileImage = (user as CustomUser).profileImage;
+      } catch (error) {
+        console.error("JWT callback error:", error);
+        // Return token as-is if DB operations fail
       }
       // console.log("Token after processing:", token);
       return token;
