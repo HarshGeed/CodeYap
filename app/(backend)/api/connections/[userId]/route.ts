@@ -3,8 +3,9 @@ import User from "@/models/userModel";
 import { connect } from "@/lib/dbConn";
 import Message from "@/models/messageModel";
 
-export const GET = async (req: NextRequest, { params }: { params: { userId: string } }) => {
+export const GET = async (req: NextRequest, context: { params: { userId: string } }) => {
   await connect();
+  const params = await context.params;
   const user = await User.findById(params.userId).populate({
     path: "connections",
     select: "_id username profileImage lastSeen", // Include lastSeen from database

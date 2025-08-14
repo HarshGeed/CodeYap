@@ -5,9 +5,10 @@ import { connect } from "@/lib/dbConn";
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { userId: string } }
+  context: { params: { userId: string } }
 ) {
-  const { userId } = await params;
+  const params = await context.params;
+  const { userId } = params;
 
   if (!userId) {
     return NextResponse.json({ error: "User ID is required" }, { status: 400 });

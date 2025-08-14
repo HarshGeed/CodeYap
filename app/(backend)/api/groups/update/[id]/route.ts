@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { connect } from "@/lib/dbConn";
 import Group from "@/models/groupModel";
 
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, context: { params: { id: string } }) {
+  const params = await context.params;
   const { id } = params;
   const { userId, name, description, profileImage } = await req.json();
   if (!id || !userId) {
