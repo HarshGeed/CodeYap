@@ -2,9 +2,6 @@ import NextAuth, {NextAuthConfig, User as NextAuthUser} from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import GitHub from "next-auth/providers/github";
 import CredentialsProvider from "next-auth/providers/credentials";
-import { compare } from "bcryptjs";
-import User from "@/models/userModel";
-import { connect } from "@/lib/dbConn";
 
 interface CustomUser extends NextAuthUser{
   id: string;
@@ -48,18 +45,33 @@ declare module "next-auth" {
             throw new Error("Missing Email or Password");
           }
           
-          await connect();
+          // For Edge Runtime compatibility, we'll handle auth via API call
+          const response = await fetch(`${process.env.NEXTAUTH_URL}/api/auth/validate-credentials`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              email: credentials.email,
+              password: credentials.password,
+            }),
+          });
 
-          const user = await User.findOne({ email: credentials.email });
+          if (!response.ok) {
+            return null;
+          }
 
-          if (!user) throw new Error("User not found");
-
-          const isValidPassword = await compare(credentials.password as string, user.password as string);
-
-          if (!isValidPassword) throw new Error("Password is wrong");
-
-          // console.log(user);
-          return user as CustomUser;
+          const user = await response.json();
+          
+          if (user && user.id) {
+            return {
+              id: user.id,
+              email: user.email,
+              username: user.username,
+              profileImage: user.profileImage,
+              isOauth: false,
+            } as CustomUser;
+          }
+          
+          return null;
         } catch (error) {
           console.log("Error =>", (error as Error).message);
           return null;
@@ -84,37 +96,25 @@ declare module "next-auth" {
       return baseUrl;
     },
     async jwt({ token, user, account }) {
-      try {
-        await connect(); // Ensure DB connection
-        
-        if (account?.provider === "google" || account?.provider === "github") {
-          // Find user in DB or create new one if not exists
-          let dbUser = await User.findOne({ email: user.email });
-
-          if (!dbUser) {
-            dbUser = await User.create({
-              username: user.name,
-              email: user.email,
-              isOauth: true,
-              profileImage: user.image,
-            });
-          }
-
-          token.id = dbUser.id;
-          token.email = dbUser.email;
-          token.name = dbUser.username;
-          token.profileImage = dbUser.profileImage;
-        } else if (user) {
-          token.id = user.id;
-          token.email = user.email;
-          token.name = (user as CustomUser).username;
-          token.profileImage = (user as CustomUser).profileImage;
-        }
-      } catch (error) {
-        console.error("JWT callback error:", error);
-        // Return token as-is if DB operations fail
+      // For Edge Runtime compatibility, avoid database calls in JWT callback
+      // Database operations should be handled in API routes instead
+      
+      if (account?.provider === "google" || account?.provider === "github") {
+        // Store basic user info from OAuth provider
+        token.id = user.id;
+        token.email = user.email;
+        token.name = user.name;
+        token.profileImage = user.image;
+        token.isOauth = true;
+      } else if (user) {
+        // For credentials login, user data is already available
+        token.id = user.id;
+        token.email = user.email;
+        token.name = (user as CustomUser).username;
+        token.profileImage = (user as CustomUser).profileImage;
+        token.isOauth = (user as CustomUser).isOauth || false;
       }
-      // console.log("Token after processing:", token);
+      
       return token;
     },
     async session({ session, token }) {

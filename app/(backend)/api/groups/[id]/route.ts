@@ -4,9 +4,10 @@ import Group from "@/models/groupModel";
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = params;
+  const resolvedParams = await params;
+  const { id } = resolvedParams;
   if (!id) {
     return NextResponse.json(
       { error: "Group ID is required" },

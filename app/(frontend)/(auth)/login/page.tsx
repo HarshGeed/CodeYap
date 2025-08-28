@@ -10,7 +10,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
-  const { data: session, status } = useSession();
+  const { status } = useSession();
 
   useEffect(() => {
     if (status === "authenticated") {

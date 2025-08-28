@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 
-export const GET = async (req: NextRequest) => {
+export async function GET() {
   try {
     // This would need to be connected to the socket server
     // For now, we'll return a simple response
@@ -14,4 +14,4 @@ export const GET = async (req: NextRequest) => {
     console.error("Error fetching online users:", error);
     return NextResponse.json({ onlineUsers: [] });
   }
-}; 
+} 

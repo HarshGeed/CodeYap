@@ -4,10 +4,11 @@ import { connect } from "@/lib/dbConn";
 
 export const GET = async (
   req: NextRequest,
-  { params }: { params: { roomId: string } }
+  { params }: { params: Promise<{ roomId: string }> }
 ) => {
   await connect();
-  const messages = await Message.find({ roomId: params.roomId }).sort({
+  const resolvedParams = await params;
+  const messages = await Message.find({ roomId: resolvedParams.roomId }).sort({
     timestamp: 1,
   });
   return NextResponse.json(messages, { status: 200 });
@@ -15,7 +16,7 @@ export const GET = async (
 
 export const PATCH = async (
   req: NextRequest,
-  { params }: { params: { roomId: string } }
+  { params }: { params: Promise<{ roomId: string }> }
 ) => {
   await connect();
   const { messageId, userId } = await req.json();

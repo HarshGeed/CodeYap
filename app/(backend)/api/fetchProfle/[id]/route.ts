@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import User from "@/models/userModel";
 import { connect } from "@/lib/dbConn";
 
-export const GET = async(req: NextRequest, context: {params: {id: string}}) => {
+export const GET = async(req: NextRequest, context: {params: Promise<{id: string}>}) => {
     try{
         await connect();
         const params = await context.params;
@@ -18,7 +18,7 @@ export const GET = async(req: NextRequest, context: {params: {id: string}}) => {
             status: 200,
             headers: {"Content-Type" : "application/json"}
         });
-    }catch(error){
+    }catch{
         return NextResponse.json({error: "Server error"}, {status: 500})
     }
 }

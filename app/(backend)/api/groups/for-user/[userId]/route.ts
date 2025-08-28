@@ -5,7 +5,7 @@ import { connect } from "@/lib/dbConn";
 
 export async function GET(
   req: NextRequest,
-  context: { params: { userId: string } }
+  context: { params: Promise<{ userId: string }> }
 ) {
   const params = await context.params;
   const { userId } = params;

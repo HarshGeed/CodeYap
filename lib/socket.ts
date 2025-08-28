@@ -1,7 +1,7 @@
 import { io, Socket } from "socket.io-client";
 
 let socket: Socket | null = null;
-let registeredUsers = new Set<string>();
+const registeredUsers = new Set<string>();
 
 export const connectSocket = (): Socket => {
   if (!socket) {
