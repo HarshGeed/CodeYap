@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState, useMemo, useCallback, RefObject } from "react";
+import { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import Image from "next/image";
 import { useSession } from "next-auth/react";
 import { connectSocket, registerUser } from "@/lib/socket";
@@ -52,7 +52,7 @@ export default function UserChatRoom({ selectedUser, onUpdateLastMessage }: User
   const [uploading, setUploading] = useState(false);
   const [uploadPercent, setUploadPercent] = useState<number | null>(null);
   const socketRef = useRef<Socket | null>(null);
-  const bottomRef: RefObject<HTMLDivElement> = useRef<HTMLDivElement>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
   const { data: session } = useSession();
   const [modalMedia, setModalMedia] = useState<{ type: string; src: string } | null>(null);
   const [modalLoading, setModalLoading] = useState(true);
@@ -373,7 +373,7 @@ export default function UserChatRoom({ selectedUser, onUpdateLastMessage }: User
         setSeenMessageIds(prev => new Set([...prev, msg._id!]));
       });
     }
-  }, [messages, selectedUser, session?.user?.id]);
+  }, [messages, selectedUser, session?.user?.id, seenMessageIds]);
 
   // Clear seen messages when selected user changes
   useEffect(() => {
@@ -605,13 +605,16 @@ export default function UserChatRoom({ selectedUser, onUpdateLastMessage }: User
                 fileType: fileTypeFromUrl(fileObj.url),
                 originalName: fileObj.originalName,
               };
-              setMessages((prev) => [...prev, msgObj]);
-              socketRef.current?.emit("send-message", msgObj);
-              await fetch("/api/messages/send", {
+              // Save to backend first and get the message with _id
+              const res = await fetch("/api/messages/send", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(msgObj),
               });
+              const savedMsg = await res.json();
+              // Then emit via socket (do NOT add to state here - the socket handler will do that)
+              socketRef.current?.emit("send-message", savedMsg);
+              onUpdateLastMessage(selectedUser._id, fileObj.url);
             }
           }
         } else {
@@ -728,7 +731,6 @@ export default function UserChatRoom({ selectedUser, onUpdateLastMessage }: User
       <MessageList
         messages={memoizedMessages}
         sessionUserId={session?.user?.id ?? ""}
-        selectedUserId={selectedUser._id}
         seenMessageIds={memoizedSeenMessageIds}
         formatTime={memoizedFormatTime}
         formatDate={memoizedFormatDate}
@@ -751,9 +753,6 @@ export default function UserChatRoom({ selectedUser, onUpdateLastMessage }: User
         uploadPercent={uploadPercent}
         handleFileChange={handleFileChange}
         handleSendMessage={handleSendMessage}
-        session={session}
-        selectedUser={selectedUser}
-        socketRef={socketRef}
       />
       {/* Modal for media preview */}
       {modalMedia && (

@@ -49,7 +49,8 @@ const ChatInputBar: React.FC<ChatInputBarProps> = React.memo(({
   }, []);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter") {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
       setNewMessage(internalValue);
       handleSendMessage();
     }
@@ -132,7 +133,7 @@ const ChatInputBar: React.FC<ChatInputBarProps> = React.memo(({
           multiple
           hidden
           onChange={handleFileChange}
-          accept="image/*,video/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt"
+          accept="image/*"
           disabled={uploading}
         />
         {uploading

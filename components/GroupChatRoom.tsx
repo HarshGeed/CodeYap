@@ -4,7 +4,6 @@ import Image from "next/image";
 import default_pfp from "@/public/default_pfp.jpg";
 import { useSession } from "next-auth/react";
 import { Paperclip } from "lucide-react";
-import { connectSocket } from "@/lib/socket";
 import { CodeEditor, CodeHighlighter } from "./CodeEditor";
 import { Github } from "lucide-react";
 import GithubShareModal from "./GithubShareModal";
@@ -36,7 +35,11 @@ interface GroupMessage {
 export default function GroupChatRoom({ group }: GroupChatRoomProps) {
   const [messages, setMessages] = useState<GroupMessage[]>([]);
   const [newMessage, setNewMessage] = useState("");
-  const socketRef = useRef<any>(null);
+  const socketRef = useRef<{
+    emit: (event: string, data: unknown) => void;
+    on: (event: string, handler: (data: unknown) => void) => void;
+    off: (event: string, handler: (data: unknown) => void) => void;
+  } | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const { data: session } = useSession();
   const [uploading, setUploading] = useState(false);
@@ -134,22 +137,25 @@ export default function GroupChatRoom({ group }: GroupChatRoomProps) {
       if (xhr.status === 200) {
         const data = JSON.parse(xhr.responseText);
         if (data.urls && Array.isArray(data.urls)) {
-          for (const url of data.urls) {
+          for (const fileObj of data.urls) {
             const msgObj: GroupMessage = {
               groupId: group._id,
-              senderId: session?.user?.id,
+              senderId: session?.user?.id || "",
               senderName: session?.user?.username,
               senderImage: session?.user?.profileImage,
-              message: url,
+              message: fileObj.url,
               timestamp: new Date().toISOString(),
-              fileType: fileTypeFromUrl(url),
+              fileType: fileTypeFromUrl(fileObj.url),
             };
-            socketRef.current.emit("send-group-message", msgObj);
-            await fetch("/api/group-messages/send", {
+            // Save to backend first and get the message with _id
+            const res = await fetch("/api/group-messages/send", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify(msgObj),
             });
+            const savedMsg = await res.json();
+            // Then emit via socket (do NOT add to state here - the socket handler will do that)
+            socketRef.current?.emit("send-group-message", savedMsg);
           }
         }
       } else {
@@ -168,7 +174,7 @@ export default function GroupChatRoom({ group }: GroupChatRoomProps) {
     };
 
     xhr.send(formData);
-  } catch (error) {
+  } catch {
     alert("File upload failed.");
     setUploading(false);
     setUploadPercent(null);
@@ -275,7 +281,7 @@ export default function GroupChatRoom({ group }: GroupChatRoomProps) {
       if (!codeContent.trim()) return;
       const msgObj: GroupMessage = {
         groupId: group._id,
-        senderId: session?.user?.id,
+        senderId: session?.user?.id || "",
         senderName: session?.user?.username,
         senderImage: session?.user?.profileImage,
         message: "", // Not used for code
@@ -286,7 +292,7 @@ export default function GroupChatRoom({ group }: GroupChatRoomProps) {
           content: codeContent,
         },
       };
-      socketRef.current.emit("send-group-message", msgObj);
+      socketRef.current?.emit("send-group-message", msgObj);
       await fetch("/api/group-messages/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -299,13 +305,13 @@ export default function GroupChatRoom({ group }: GroupChatRoomProps) {
     if (!newMessage.trim()) return;
     const msgObj: GroupMessage = {
       groupId: group._id,
-      senderId: session?.user?.id,
+      senderId: session?.user?.id || "",
       senderName: session?.user?.username,
       senderImage: session?.user?.profileImage,
       message: newMessage,
       timestamp: new Date().toISOString(),
     };
-    socketRef.current.emit("send-group-message", msgObj);
+    socketRef.current?.emit("send-group-message", msgObj);
     await fetch("/api/group-messages/send", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -400,7 +406,7 @@ export default function GroupChatRoom({ group }: GroupChatRoomProps) {
                 idx === 0 ||
                 msgDate !==
                   new Date(messages[idx - 1].timestamp).toDateString();
-              const isOwn = msg.senderId === session.user.id;
+              const isOwn = msg.senderId === session?.user?.id;
               const isGroupStart =
                 idx === 0 || msg.senderId !== messages[idx - 1].senderId;
 
@@ -620,7 +626,7 @@ export default function GroupChatRoom({ group }: GroupChatRoomProps) {
                 multiple
                 hidden
                 onChange={handleFileChange}
-                accept="image/*,video/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt"
+                accept="image/*"
                 disabled={uploading}
               />
               {uploading
@@ -650,7 +656,12 @@ export default function GroupChatRoom({ group }: GroupChatRoomProps) {
                   });
                 }
               }}
-              onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSendMessage();
+                }
+              }}
               placeholder="Type your message..."
               disabled={uploading}
             />
