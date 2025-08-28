@@ -18,8 +18,11 @@ httpServer.on('request', (req, res) => {
 
 const io = new Server(httpServer, {
   cors: {
-    origin: "*",
+    origin: process.env.NODE_ENV === 'production' 
+      ? [process.env.FRONTEND_URL || "https://your-app-name.vercel.app"] 
+      : "*",
     methods: ["GET", "POST"],
+    credentials: true
   },
 });
 
@@ -140,9 +143,9 @@ io.on("connection", (socket) => {
   });
 });
 
-const PORT = 3001;
-httpServer.listen(PORT, () => {
-  console.log(`Socket.IO server running at http://localhost:${PORT}`);
+const PORT = process.env.PORT || 3001;
+httpServer.listen(PORT, '0.0.0.0', () => {
+  console.log(`Socket.IO server running on port ${PORT}`);
   console.log("User status tracking: In-memory + Real-time updates");
   console.log(`Currently ${onlineUsers.size} users online`);
   
