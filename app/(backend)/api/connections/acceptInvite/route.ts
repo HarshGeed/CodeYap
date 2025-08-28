@@ -4,6 +4,7 @@ import User from "@/models/userModel";
 import Notification from "@/models/notificationModel";
 import Group from "@/models/groupModel";
 import { connect } from "@/lib/dbConn";
+import { emitSocketEvent } from "@/lib/socketServer";
 
 export const POST = async (req: NextRequest) => {
   await connect();
@@ -14,6 +15,14 @@ export const POST = async (req: NextRequest) => {
     await Group.findByIdAndUpdate(groupId, { $addToSet: { acceptedMembers: userId } });
     // Mark notification as accepted
     await Notification.findByIdAndUpdate(notificationId, { "meta.accepted": true });
+    
+    // Emit socket event for group update
+    await emitSocketEvent("group-updated", {
+      userId,
+      groupId,
+      type: "joined"
+    });
+    
     return NextResponse.json({ success: true, group: true });
   }
 
@@ -27,6 +36,13 @@ export const POST = async (req: NextRequest) => {
     read: false,
     time: new Date(),
     meta: { type: "info" },
+  });
+
+  // Emit socket event for connection update
+  await emitSocketEvent("connection-accepted", {
+    userId,
+    fromUserId,
+    type: "accepted"
   });
 
   return NextResponse.json({ success: true });
