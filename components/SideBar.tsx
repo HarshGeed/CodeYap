@@ -76,6 +76,14 @@ export default function SideBar() {
             : n
         )
       );
+      // Emit socket event for group update
+      const { connectSocket } = await import("@/lib/socket");
+      const socket = connectSocket();
+      socket.emit("group-updated", {
+        userId,
+        groupId: notif.meta?.groupId,
+        type: "joined"
+      });
     } else {
       // Accept connection invite
       await fetch("/api/connections/acceptInvite", {
@@ -98,6 +106,14 @@ export default function SideBar() {
             : n
         )
       );
+      // Emit socket event for connection update
+      const { connectSocket } = await import("@/lib/socket");
+      const socket = connectSocket();
+      socket.emit("connection-accepted", {
+        userId,
+        fromUserId: notif.meta?.fromUserId,
+        type: "accepted"
+      });
     }
   };
 

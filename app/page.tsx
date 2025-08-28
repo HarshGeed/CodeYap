@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import Image from "next/image";
 import { useSession } from "next-auth/react";
 import default_pfp from "@/public/default_pfp.jpg";
@@ -28,6 +28,9 @@ interface Group {
   _id: string;
   name: string;
   members: { _id: string; username: string; profileImage?: string }[];
+  lastMessage?: string;
+  unread?: boolean;
+  lastMessageTime?: string;
 }
 
 export default function HomePage() {
@@ -166,6 +169,8 @@ export default function HomePage() {
   const handleGroupClick = (group: Group) => {
     setSelectedUser(null); // Deselect individual user
     setSelectedGroup(group);
+    // Mark group as read
+    setGroups(prev => prev.map(g => g._id === group._id ? { ...g, unread: false } : g));
   };
 
   const handleUserClick = async (user: ConnectedUser) => {
@@ -183,6 +188,10 @@ export default function HomePage() {
     // Mark as read
     setConnectedUsers(prev => prev.map(u => u._id === user._id ? { ...u, unread: false } : u));
   };
+
+  // Helper functions to check if user/group is currently active
+  const isActiveUser = useCallback((userId: string) => selectedUser?._id === userId, [selectedUser?._id]);
+  const isActiveGroup = useCallback((groupId: string) => selectedGroup?._id === groupId, [selectedGroup?._id]);
 
   const handleSearch = async (query: string) => {
     setSearch(query);
@@ -212,7 +221,7 @@ export default function HomePage() {
       // Mark as unread if not currently selected
       const updated = prev.map(user =>
         user._id === userId
-          ? { ...user, lastMessage: message, unread: selectedUser?._id !== userId }
+          ? { ...user, lastMessage: formatLastMessage(message), unread: !isActiveUser(userId), lastMessageTime: new Date().toISOString() }
           : user
       );
       // Sort: user with new message to top
@@ -224,6 +233,78 @@ export default function HomePage() {
       return updated;
     });
   };
+
+  // Handler for group message updates
+  const handleUpdateGroupLastMessage = useCallback((groupId: string, message: string) => {
+    setGroups(prev => {
+      // Mark as unread if not currently selected
+      const updated = prev.map(group =>
+        group._id === groupId
+          ? { ...group, lastMessage: formatLastMessage(message), unread: !isActiveGroup(groupId), lastMessageTime: new Date().toISOString() }
+          : group
+      );
+      // Sort: group with new message to top
+      updated.sort((a, b) => {
+        if (a._id === groupId) return -1;
+        if (b._id === groupId) return 1;
+        return 0;
+      });
+      return updated;
+    });
+  }, [isActiveGroup]);
+
+  // Separate fetch functions for reuse
+  const fetchConnectedUsers = useCallback(async () => {
+    if (!session?.user?.id) return;
+    const userId = session.user.id;
+
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/connections/${userId}`);
+      const data = await res.json();
+      // Initialize all users as offline initially (they'll be updated by socket events)
+      const usersWithStatus = data.map((user: ConnectedUser) => ({
+        ...user,
+        status: "offline" as const,
+        unread: user.unread || false,
+      }));
+      // Sort by lastMessageTime (descending)
+      usersWithStatus.sort((a: ConnectedUser, b: ConnectedUser) => {
+        if (a.lastMessageTime && b.lastMessageTime) {
+          return new Date(b.lastMessageTime).getTime() - new Date(a.lastMessageTime).getTime();
+        }
+        if (a.lastMessageTime) return -1;
+        if (b.lastMessageTime) return 1;
+        return 0;
+      });
+      setConnectedUsers(usersWithStatus);
+      console.log("Loaded connected users:", usersWithStatus);
+      // --- Join all private chat rooms so main page receives receive-message events ---
+      if (socketRef.current && session?.user?.id) {
+        data.forEach((user: ConnectedUser) => {
+          const roomId = [session.user.id, user._id].sort().join("_");
+          socketRef.current!.emit("join-room", roomId);
+        });
+      }
+    } catch (err) {
+      console.error("Error fetching connections:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, [session?.user?.id]);
+
+  const fetchGroups = useCallback(async () => {
+    if (!session?.user?.id) return;
+
+    try {
+      const res = await fetch(`/api/groups/for-user/${session?.user?.id}`);
+      if (!res.ok) throw new Error("Failed to fetch groups");
+      const data = await res.json();
+      setGroups(data);
+    } catch (err) {
+      console.error("Error fetching groups:", err);
+    }
+  }, [session?.user?.id]);
 
 
   // Connect socket and listen for status updates
@@ -297,6 +378,47 @@ export default function HomePage() {
       }
     };
     socketRef.current?.on("receive-message", receiveMessageHandler);
+
+    // --- Listen for group messages ---
+    const receiveGroupMessageHandler = (data: unknown) => {
+      const msg = data as { groupId: string; senderId: string; message: string; senderName?: string };
+      console.log('[receive-group-message] Incoming:', msg);
+      
+      // Check if current user is member of this group
+      const isGroupMember = groups.some(group => 
+        group._id === msg.groupId && 
+        group.members.some(member => member._id === session?.user?.id)
+      );
+      
+      if (isGroupMember) {
+        handleUpdateGroupLastMessage(msg.groupId, msg.message);
+      }
+    };
+    socketRef.current?.on("receive-group-message", receiveGroupMessageHandler);
+
+    // --- Listen for connection updates (when user accepts friend requests) ---
+    const connectionAcceptedHandler = (data: unknown) => {
+      const notification = data as { userId: string; fromUserId: string; type: string };
+      console.log('[connection-accepted] Incoming:', notification);
+      
+      if (notification.userId === session?.user?.id || notification.fromUserId === session?.user?.id) {
+        // Refresh connected users list
+        fetchConnectedUsers();
+      }
+    };
+    socketRef.current?.on("connection-accepted", connectionAcceptedHandler);
+
+    // --- Listen for group updates (when user joins/leaves groups) ---
+    const groupUpdatedHandler = (data: unknown) => {
+      const notification = data as { userId: string; groupId: string; type: string };
+      console.log('[group-updated] Incoming:', notification);
+      
+      if (notification.userId === session?.user?.id) {
+        // Refresh groups list
+        fetchGroups();
+      }
+    };
+    socketRef.current?.on("group-updated", groupUpdatedHandler);
     // --- END NEW ---
 
     return () => {
@@ -305,9 +427,12 @@ export default function HomePage() {
       socketRef.current?.off("user-status", statusHandler);
       // --- NEW ---
       socketRef.current?.off("receive-message", receiveMessageHandler);
+      socketRef.current?.off("receive-group-message", receiveGroupMessageHandler);
+      socketRef.current?.off("connection-accepted", connectionAcceptedHandler);
+      socketRef.current?.off("group-updated", groupUpdatedHandler);
       // --- END NEW ---
     };
-  }, [session?.user?.id, connectedUsers.length, selectedUser?._id]);
+  }, [session?.user?.id, connectedUsers.length, selectedUser?._id, groups, handleUpdateGroupLastMessage, fetchConnectedUsers, fetchGroups]);
 
   // After users are loaded, apply buffered status events
   useEffect(() => {
@@ -343,65 +468,13 @@ export default function HomePage() {
 
   // Fetch groups
   useEffect(() => {
-    if (!session?.user?.id) return;
-
-    const fetchGroups = async () => {
-      try {
-        const res = await fetch(`/api/groups/for-user/${session?.user?.id}`);
-        if (!res.ok) throw new Error("Failed to fetch groups");
-        const data = await res.json();
-        setGroups(data);
-      } catch (err) {
-        console.error(err);
-      }
-    };
-
     fetchGroups();
-  }, [session?.user?.id]);
+  }, [fetchGroups]);
 
   // Fetch connections when session is ready
   useEffect(() => {
-    if (!session?.user?.id) return;
-    const userId = session.user.id;
-
-    async function fetchConnections() {
-      setLoading(true);
-      try {
-        const res = await fetch(`/api/connections/${userId}`);
-        const data = await res.json();
-        // Initialize all users as offline initially (they'll be updated by socket events)
-        const usersWithStatus = data.map((user: ConnectedUser) => ({
-          ...user,
-          status: "offline" as const,
-          unread: user.unread || false,
-        }));
-        // Sort by lastMessageTime (descending)
-        usersWithStatus.sort((a: ConnectedUser, b: ConnectedUser) => {
-          if (a.lastMessageTime && b.lastMessageTime) {
-            return new Date(b.lastMessageTime).getTime() - new Date(a.lastMessageTime).getTime();
-          }
-          if (a.lastMessageTime) return -1;
-          if (b.lastMessageTime) return 1;
-          return 0;
-        });
-        setConnectedUsers(usersWithStatus);
-        console.log("Loaded connected users:", usersWithStatus);
-        // --- Join all private chat rooms so main page receives receive-message events ---
-        if (socketRef.current && session?.user?.id) {
-          data.forEach((user: ConnectedUser) => {
-            const roomId = [session.user.id, user._id].sort().join("_");
-            socketRef.current!.emit("join-room", roomId);
-          });
-        }
-      } catch {
-        setConnectedUsers([]);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    fetchConnections();
-  }, [session]);
+    fetchConnectedUsers();
+  }, [fetchConnectedUsers]);
 
   return (
     <>
@@ -522,17 +595,23 @@ export default function HomePage() {
                 {groups.map((group) => (
                   <li
                     key={group._id}
-                    className="flex items-center gap-3 bg-[#282d38] hover:bg-[#22304a] p-3 rounded-xl cursor-pointer transition"
+                    className={`flex items-center gap-3 bg-[#282d38] hover:bg-[#22304a] p-3 rounded-xl cursor-pointer transition ${group.unread ? 'border-2 border-[#60a5fa] bg-[#22304a]/60' : ''}`}
                     onClick={() => handleGroupClick(group)}
                   >
-                    <div className="h-14 w-14 bg-[#22304a] rounded-full flex items-center justify-center text-[#60a5fa] font-bold text-xl">
+                    <div className="h-14 w-14 bg-[#22304a] rounded-full flex items-center justify-center text-[#60a5fa] font-bold text-xl relative">
                       {group.name[0]}
+                      {/* Unread badge */}
+                      {group.unread && (
+                        <div className="absolute top-0 right-0 w-3 h-3 bg-[#60a5fa] rounded-full border-2 border-[#22304a] animate-pulse"></div>
+                      )}
                     </div>
-                    <div>
-                      <div className="font-medium text-base text-[#e0e7ef]">
+                    <div className="flex-1">
+                      <div className={`font-medium text-base ${group.unread ? 'text-[#60a5fa] font-bold' : 'text-[#e0e7ef]'}`}>
                         {group.name}
                       </div>
-                      <div className="text-xs text-[#60a5fa]/80">Group</div>
+                      <div className={`text-xs ${group.unread ? 'text-[#60a5fa]' : 'text-[#60a5fa]/80'}`}>
+                        {group.lastMessage ? formatLastMessage(group.lastMessage) : "Group"}
+                      </div>
                     </div>
                   </li>
                 ))}
