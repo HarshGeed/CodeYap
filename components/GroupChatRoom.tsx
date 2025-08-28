@@ -235,7 +235,28 @@ export default function GroupChatRoom({ group }: GroupChatRoomProps) {
       socket.off("receive-group-message");
       const handler = (msg: GroupMessage) => {
         if (msg.groupId === group._id) {
-          setMessages((prev) => [...prev, msg]);
+          // Check if this is the sender's own message that we already added optimistically
+          const isSenderMessage = msg.senderId === session?.user?.id;
+          
+          setMessages((prev) => {
+            // If this is sender's message, check if we already have a temp version
+            if (isSenderMessage) {
+              const tempMessageIndex = prev.findIndex(m => 
+                m._id?.startsWith('temp-') && 
+                m.senderId === msg.senderId && 
+                Math.abs(new Date(m.timestamp).getTime() - new Date(msg.timestamp).getTime()) < 5000 // Within 5 seconds
+              );
+              
+              if (tempMessageIndex !== -1) {
+                // Replace temp message with real message (but for groups, we don't get real IDs back)
+                // So just remove the temp message to avoid duplicates
+                return prev.filter(m => m._id !== prev[tempMessageIndex]._id);
+              }
+            }
+            
+            // For receiver's message or if no temp message found, add normally
+            return [...prev, msg];
+          });
         }
       };
 
@@ -292,16 +313,31 @@ export default function GroupChatRoom({ group }: GroupChatRoomProps) {
           content: codeContent,
         },
       };
-      socketRef.current?.emit("send-group-message", msgObj);
-      await fetch("/api/group-messages/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(msgObj),
-      });
+      
+      // Optimistically add to UI immediately for sender
+      const tempMsg: GroupMessage = { ...msgObj, _id: `temp-${Date.now()}` };
+      setMessages((prev) => [...prev, tempMsg]);
       setCodeContent("");
       setCodeMode(false);
+      
+      try {
+        // Save to backend first
+        await fetch("/api/group-messages/send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(msgObj),
+        });
+        
+        // Emit via socket for other users
+        socketRef.current?.emit("send-group-message", msgObj);
+      } catch (error) {
+        console.error("Failed to send code message:", error);
+        // Remove temp message on error
+        setMessages((prev) => prev.filter(msg => msg._id !== tempMsg._id));
+      }
       return;
     }
+    
     if (!newMessage.trim()) return;
     const msgObj: GroupMessage = {
       groupId: group._id,
@@ -311,13 +347,29 @@ export default function GroupChatRoom({ group }: GroupChatRoomProps) {
       message: newMessage,
       timestamp: new Date().toISOString(),
     };
-    socketRef.current?.emit("send-group-message", msgObj);
-    await fetch("/api/group-messages/send", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(msgObj),
-    });
+    
+    // Optimistically add to UI immediately for sender
+    const tempMsg: GroupMessage = { ...msgObj, _id: `temp-${Date.now()}` };
+    setMessages((prev) => [...prev, tempMsg]);
+    const messageToSend = newMessage;
     setNewMessage("");
+    
+    try {
+      // Save to backend first
+      await fetch("/api/group-messages/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(msgObj),
+      });
+      
+      // Emit via socket for other users
+      socketRef.current?.emit("send-group-message", msgObj);
+    } catch (error) {
+      console.error("Failed to send message:", error);
+      // Remove temp message on error and restore input
+      setMessages((prev) => prev.filter(msg => msg._id !== tempMsg._id));
+      setNewMessage(messageToSend);
+    }
   };
 
   // GitHub Share handler

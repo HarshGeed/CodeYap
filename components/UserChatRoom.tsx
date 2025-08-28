@@ -314,7 +314,36 @@ export default function UserChatRoom({ selectedUser, onUpdateLastMessage }: User
         selectedUser &&
         msg.roomId === getRoomId(session?.user?.id || "", selectedUser._id)
       ) {
-        setMessages((prev) => [...prev, msg]);
+        // Check if this is the sender's own message that we already added optimistically
+        const isSenderMessage = msg.senderId === session?.user?.id;
+        
+        setMessages((prev) => {
+          // If this is sender's message, check if we already have a temp version
+          if (isSenderMessage) {
+            const tempMessageIndex = prev.findIndex(m => 
+              m._id?.startsWith('temp-') && 
+              m.senderId === msg.senderId && 
+              Math.abs(new Date(m.timestamp).getTime() - new Date(msg.timestamp).getTime()) < 5000 // Within 5 seconds
+            );
+            
+            if (tempMessageIndex !== -1) {
+              // Replace temp message with real message
+              const newMessages = [...prev];
+              newMessages[tempMessageIndex] = msg;
+              return newMessages;
+            }
+          }
+          
+          // For receiver's message or if no temp message found, add normally
+          // But check for duplicates first
+          const messageExists = prev.some(m => m._id === msg._id);
+          if (messageExists) {
+            return prev;
+          }
+          
+          return [...prev, msg];
+        });
+        
         onUpdateLastMessage(selectedUser._id, msg.message);
         
         // If this is a message to the current user, emit seen immediately
@@ -477,6 +506,7 @@ export default function UserChatRoom({ selectedUser, onUpdateLastMessage }: User
       const roomId = getRoomId(session?.user?.id || "", selectedUser._id);
       const msgObj = {
         roomId,
+        message: "", // Required field
         senderId: session?.user?.id || "",
         receiverId: selectedUser._id,
         timestamp: new Date().toISOString(),
@@ -486,20 +516,39 @@ export default function UserChatRoom({ selectedUser, onUpdateLastMessage }: User
           content: codeContent,
         },
       };
-      // Save to backend and get the message with _id
-      const res = await fetch("/api/messages/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(msgObj),
-      });
-      const savedMsg = await res.json();
-      console.log("[DEBUG] Message sent and saved:", savedMsg);
-      socketRef.current?.emit("send-message", savedMsg);
+      
+      // Optimistically add to UI immediately for sender
+      const tempMsg: Message = { ...msgObj, _id: `temp-${Date.now()}` };
+      setMessages((prev) => [...prev, tempMsg]);
       setCodeContent("");
       setCodeMode(false);
       onUpdateLastMessage(selectedUser._id, "[code]");
+      
+      try {
+        // Save to backend and get the message with _id
+        const res = await fetch("/api/messages/send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(msgObj),
+        });
+        const savedMsg = await res.json();
+        console.log("[DEBUG] Code message sent and saved:", savedMsg);
+        
+        // Replace temp message with real message
+        setMessages((prev) => prev.map(msg => 
+          msg._id === tempMsg._id ? savedMsg : msg
+        ));
+        
+        // Emit via socket for other users
+        socketRef.current?.emit("send-message", savedMsg);
+      } catch (error) {
+        console.error("Failed to send code message:", error);
+        // Remove temp message on error
+        setMessages((prev) => prev.filter(msg => msg._id !== tempMsg._id));
+      }
       return;
     }
+    
     if (!newMessage.trim() || !selectedUser || !session?.user?.id) return;
     const roomId = getRoomId(session?.user?.id || "", selectedUser._id);
     const msgObj = {
@@ -510,20 +559,36 @@ export default function UserChatRoom({ selectedUser, onUpdateLastMessage }: User
       timestamp: new Date().toISOString(),
     };
 
-    // Save to backend and get the message with _id
-    const res = await fetch("/api/messages/send", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(msgObj),
-    });
-    const savedMsg = await res.json();
-    console.log("[DEBUG] Message sent and saved:", savedMsg);
-
-    // Emit via socket (do NOT add to state here)
-    socketRef.current?.emit("send-message", savedMsg);
-
+    // Optimistically add to UI immediately for sender
+    const tempMsg: Message = { ...msgObj, _id: `temp-${Date.now()}` };
+    setMessages((prev) => [...prev, tempMsg]);
+    const messageToUpdate = newMessage;
     setNewMessage("");
-    onUpdateLastMessage(selectedUser._id, newMessage);
+    onUpdateLastMessage(selectedUser._id, messageToUpdate);
+
+    try {
+      // Save to backend and get the message with _id
+      const res = await fetch("/api/messages/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(msgObj),
+      });
+      const savedMsg = await res.json();
+      console.log("[DEBUG] Message sent and saved:", savedMsg);
+
+      // Replace temp message with real message
+      setMessages((prev) => prev.map(msg => 
+        msg._id === tempMsg._id ? savedMsg : msg
+      ));
+
+      // Emit via socket for other users
+      socketRef.current?.emit("send-message", savedMsg);
+    } catch (error) {
+      console.error("Failed to send message:", error);
+      // Remove temp message on error and restore input
+      setMessages((prev) => prev.filter(msg => msg._id !== tempMsg._id));
+      setNewMessage(messageToUpdate);
+    }
   };
 
   // GitHub Share handler
