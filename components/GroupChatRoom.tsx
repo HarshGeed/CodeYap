@@ -297,7 +297,7 @@ export default function GroupChatRoom({ group }: GroupChatRoomProps) {
     return () => { if (cleanup) cleanup(); };
   }, [group?._id, session?.user?.id]);
 
-  const handleSendMessage = async () => {
+  const handleSendMessage = async (messageText?: string) => {
     if (codeMode) {
       if (!codeContent.trim()) return;
       const msgObj: GroupMessage = {
@@ -338,20 +338,23 @@ export default function GroupChatRoom({ group }: GroupChatRoomProps) {
       return;
     }
     
-    if (!newMessage.trim()) return;
+    // Use messageText parameter if provided, otherwise use state
+    const messageToSend = messageText || newMessage;
+    if (!messageToSend.trim()) return;
+    
     const msgObj: GroupMessage = {
       groupId: group._id,
       senderId: session?.user?.id || "",
       senderName: session?.user?.username,
       senderImage: session?.user?.profileImage,
-      message: newMessage,
+      message: messageToSend,
       timestamp: new Date().toISOString(),
     };
     
     // Optimistically add to UI immediately for sender
     const tempMsg: GroupMessage = { ...msgObj, _id: `temp-${Date.now()}` };
     setMessages((prev) => [...prev, tempMsg]);
-    const messageToSend = newMessage;
+    const messageToUpdate = messageToSend;
     setNewMessage("");
     
     try {
@@ -368,7 +371,7 @@ export default function GroupChatRoom({ group }: GroupChatRoomProps) {
       console.error("Failed to send message:", error);
       // Remove temp message on error and restore input
       setMessages((prev) => prev.filter(msg => msg._id !== tempMsg._id));
-      setNewMessage(messageToSend);
+      setNewMessage(messageToUpdate);
     }
   };
 
@@ -711,7 +714,7 @@ export default function GroupChatRoom({ group }: GroupChatRoomProps) {
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
-                  handleSendMessage();
+                  handleSendMessage(newMessage);
                 }
               }}
               placeholder="Type your message..."

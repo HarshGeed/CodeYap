@@ -500,7 +500,7 @@ export default function UserChatRoom({ selectedUser, onUpdateLastMessage }: User
     };
   }, [session?.user?.id, selectedUser, messages, seenMessageIds]);
 
-  const handleSendMessage = async () => {
+  const handleSendMessage = async (messageText?: string) => {
     if (codeMode) {
       if (!codeContent.trim() || !selectedUser || !session?.user?.id) return;
       const roomId = getRoomId(session?.user?.id || "", selectedUser._id);
@@ -549,11 +549,14 @@ export default function UserChatRoom({ selectedUser, onUpdateLastMessage }: User
       return;
     }
     
-    if (!newMessage.trim() || !selectedUser || !session?.user?.id) return;
+    // Use messageText parameter if provided, otherwise use state
+    const messageToSend = messageText || newMessage;
+    if (!messageToSend.trim() || !selectedUser || !session?.user?.id) return;
+    
     const roomId = getRoomId(session?.user?.id || "", selectedUser._id);
     const msgObj = {
       roomId,
-      message: newMessage,
+      message: messageToSend,
       senderId: session?.user?.id || "",
       receiverId: selectedUser._id,
       timestamp: new Date().toISOString(),
@@ -562,7 +565,7 @@ export default function UserChatRoom({ selectedUser, onUpdateLastMessage }: User
     // Optimistically add to UI immediately for sender
     const tempMsg: Message = { ...msgObj, _id: `temp-${Date.now()}` };
     setMessages((prev) => [...prev, tempMsg]);
-    const messageToUpdate = newMessage;
+    const messageToUpdate = messageToSend;
     setNewMessage("");
     onUpdateLastMessage(selectedUser._id, messageToUpdate);
 

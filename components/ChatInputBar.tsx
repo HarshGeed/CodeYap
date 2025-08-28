@@ -14,7 +14,7 @@ interface ChatInputBarProps {
   uploading: boolean;
   uploadPercent: number | null;
   handleFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  handleSendMessage: () => void;
+  handleSendMessage: (messageText?: string) => void;
 }
 
 const ChatInputBar: React.FC<ChatInputBarProps> = React.memo(({
@@ -51,9 +51,15 @@ const ChatInputBar: React.FC<ChatInputBarProps> = React.memo(({
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
+      // Update the parent state and send message with current value
       setNewMessage(internalValue);
-      handleSendMessage();
+      handleSendMessage(internalValue);
     }
+  }, [internalValue, setNewMessage, handleSendMessage]);
+
+  const handleSendClick = useCallback(() => {
+    setNewMessage(internalValue);
+    handleSendMessage(internalValue);
   }, [internalValue, setNewMessage, handleSendMessage]);
 
   return codeMode ? (
@@ -117,7 +123,7 @@ const ChatInputBar: React.FC<ChatInputBarProps> = React.memo(({
         </select>
         <button
           className="bg-[#2563eb] hover:bg-[#1d4ed8] text-white px-6 py-2 rounded-lg shadow transition"
-          onClick={handleSendMessage}
+          onClick={handleSendClick}
           disabled={uploading || !codeContent.trim()}
           type="button"
         >
@@ -161,10 +167,7 @@ const ChatInputBar: React.FC<ChatInputBarProps> = React.memo(({
       />
       <button
         className="bg-[#2563eb] hover:bg-[#1d4ed8] text-white px-6 py-2 rounded-r-lg shadow transition"
-        onClick={() => {
-          setNewMessage(internalValue);
-          handleSendMessage();
-        }}
+        onClick={handleSendClick}
         disabled={uploading}
         type="button"
       >
