@@ -45,6 +45,31 @@ export default function HomePage() {
   const statusBuffer = useRef<{ userId: string; status: string; lastSeen?: string }[]>([]);
   const [socketConnected, setSocketConnected] = useState(false);
 
+  // Helper function to format last message for display
+  const formatLastMessage = (message: string | undefined): string => {
+    if (!message) return "No messages yet.";
+    
+    // Check if it's a file URL (contains common file extensions or cloudinary patterns)
+    const isFileUrl = message.match(/\.(jpg|jpeg|png|gif|webp|mp4|webm|ogg|mov|pdf|docx?|pptx?|xlsx?|txt)$/i) || 
+                      message.includes('cloudinary.com') || 
+                      message.includes('upload') ||
+                      message.startsWith('https://res.cloudinary.com') ||
+                      message.includes('/image/upload/') ||
+                      message.includes('/video/upload/') ||
+                      message.includes('/auto/upload/');
+    
+    if (isFileUrl) {
+      return "📎 File uploaded";
+    }
+    
+    // Truncate text messages to 30 characters
+    if (message.length > 30) {
+      return message.substring(0, 30) + "...";
+    }
+    
+    return message;
+  };
+
   // Restore chat state after OAuth redirect
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -103,7 +128,8 @@ export default function HomePage() {
         }
       }
     }
-  }, []); // Run only once on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Run only once on mount - intentionally not including dependencies as this should only run once
 
   // Additional effect to restore group when groups are loaded
   useEffect(() => {
@@ -488,7 +514,7 @@ export default function HomePage() {
                     </div>
                     <div className="flex-1">
                       <div className={`font-medium text-base ${user.unread ? 'text-[#60a5fa] font-bold' : 'text-[#e0e7ef]'}`}>{user.username}</div>
-                      <div className={`text-xs ${user.unread ? 'text-[#60a5fa]' : 'text-[#60a5fa]/80'}`}>{user.lastMessage || "No messages yet."}</div>
+                      <div className={`text-xs ${user.unread ? 'text-[#60a5fa]' : 'text-[#60a5fa]/80'}`}>{formatLastMessage(user.lastMessage)}</div>
                     </div>
                   </li>
                 ))}
