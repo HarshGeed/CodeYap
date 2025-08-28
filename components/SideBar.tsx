@@ -192,7 +192,9 @@ export default function SideBar() {
         </span>
       ),
       label: "Chats",
-      onClick: () => {},
+      onClick: () => {
+        router.push('/');
+      },
     },
     {
       icon: (
@@ -223,13 +225,6 @@ export default function SideBar() {
       label: "Profile",
       onClick: () => {
         router.push(`/profile/${userId}`);
-      },
-    },
-    {
-      icon: <Settings size={24} />,
-      label: "Settings",
-      onClick: () => {
-        // handle navigation to settings
       },
     },
     {
