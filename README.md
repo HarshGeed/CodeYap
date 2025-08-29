@@ -116,7 +116,7 @@ From the Monaco code editor to GitHub integration, every feature is designed wit
 - **Event-driven architecture** - Scalable messaging system
 
 ---
-
+<!--
 ## 🚀 **Getting Started**
 
 ### **Quick Start**
@@ -153,7 +153,7 @@ NEXT_PUBLIC_SOCKET_URL=http://localhost:3001
 ```
 
 ---
-
+-->
 ## 📸 **Features in Action**
 
 ### **Real-Time Messaging**
@@ -192,7 +192,7 @@ NEXT_PUBLIC_SOCKET_URL=http://localhost:3001
 ✅ **Beautiful UI** - Thoughtfully designed interface that's a joy to use  
 
 ---
-
+<!--
 ## 📋 **Roadmap**
 
 - [ ] **Voice/Video Calls** - Integrated calling within chat rooms
@@ -222,6 +222,7 @@ We welcome contributions! Whether it's bug fixes, feature additions, or document
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ---
+-->
 
 ## 👨‍💻 **Author**
 
