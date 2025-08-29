@@ -9,6 +9,8 @@ A modern, feature-rich messaging and code collaboration platform that brings dev
 ![React](https://img.shields.io/badge/React-19.0.0-blue?logo=react)
 ![Socket.IO](https://img.shields.io/badge/Socket.IO-4.8.1-green?logo=socket.io)
 
+## 🌐 Website: [code-yap.vercel.app](https://code-yap.vercel.app)
+
 ---
 
 ## ✨ **Key Features**
